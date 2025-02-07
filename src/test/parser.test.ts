@@ -1,27 +1,32 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { TransactionParser } from '../lib/parser';
 import { SwapState } from '../lib/state';
-import { AmmType, PROGRAM_IDS } from '../lib/types';
+import { AmmType } from '../lib/types';
 import { sleep } from '../lib/utils';
-import { withRetry } from '../lib/retry';
 
 // Raydium swap 交易签名
-const RAYDIUM_TEST_SIGNATURE = '3JWAkycz9cLt647dWAiua13WxV38kqBHyeuVvBxErJd5R3SZ7Rp982vsBxC8RBwTeLvLPa8KFWfVZp3dpWUqSpq2';
+const RAYDIUM_TEST_SIGNATURE =
+  '3JWAkycz9cLt647dWAiua13WxV38kqBHyeuVvBxErJd5R3SZ7Rp982vsBxC8RBwTeLvLPa8KFWfVZp3dpWUqSpq2';
 
 // Orca swap 交易签名
-const ORCA_TEST_SIGNATURE = '3CPVxgpHNmCGC8XnjouJYPJU8aMYoQAqDPg5ZcUDD4ZFpNE6B7RDwrosJEh5BWzxuQL3zJKmv3QmZuavCaAz4uFg'; // 需要填入一个 Orca swap 交易签名
+const ORCA_TEST_SIGNATURE =
+  '3CPVxgpHNmCGC8XnjouJYPJU8aMYoQAqDPg5ZcUDD4ZFpNE6B7RDwrosJEh5BWzxuQL3zJKmv3QmZuavCaAz4uFg'; // 需要填入一个 Orca swap 交易签名
 
 // Jupiter swap 交易签名
-const JUPITER_TEST_SIGNATURE = '4Fr1GYVidxM9xMr2HCo62j3FdFYLcMZBFA4N3gTE4egxSxoir6erTXpHhx8JKoqscxxcfGTF4ruHMXiDfWSYJAZ7'; // 需要填入一个 Jupiter swap 交易签名
+const JUPITER_TEST_SIGNATURE =
+  '4Fr1GYVidxM9xMr2HCo62j3FdFYLcMZBFA4N3gTE4egxSxoir6erTXpHhx8JKoqscxxcfGTF4ruHMXiDfWSYJAZ7'; // 需要填入一个 Jupiter swap 交易签名
 
 // Meteora swap 交易签名
-const METEORA_TEST_SIGNATURE = '5WaGBypcFA5v21UDWdPXNcqshDpNUfQ4RzhsPhDZ4KmnefBxf19orMzMdLLgWux5js69JPFESZzRKCHg6P8AB2H'; // 需要填入一个 Meteora swap 交易签名
+const METEORA_TEST_SIGNATURE =
+  '5WaGBypcFA5v21UDWdPXNcqshDpNUfQ4RzhsPhDZ4KmnefBxf19orMzMdLLgWux5js69JPFESZzRKCHg6P8AB2H'; // 需要填入一个 Meteora swap 交易签名
 
 // Pumpfun swap 交易签名
-const PUMPFUN_TEST_SIGNATURE = '2bz3AJVqx1LBZE1qcrqnqf8uFfwkeToufV1ZteZKXYmJEA4A89VAt5o7hJA8KgyKDGcHZLfNBpJgtT6a3UGCZn4r'; // 需要填入一个 Pumpfun swap 交易签名
+const PUMPFUN_TEST_SIGNATURE =
+  '2bz3AJVqx1LBZE1qcrqnqf8uFfwkeToufV1ZteZKXYmJEA4A89VAt5o7hJA8KgyKDGcHZLfNBpJgtT6a3UGCZn4r'; // 需要填入一个 Pumpfun swap 交易签名
 
 // Moonshot swap 交易签名
-const MOONSHOT_TEST_SIGNATURE = '3VurVYpBp2c8ma3W9hi72sNHUCx9hAcS5xwrYs2rUdfvVhFD7NzeSEkJv9Ga4VhgJiHr3ckTM9xfLHNYx1d2UW8F'; // 需要填入一个 Moonshot swap 交易签名
+const MOONSHOT_TEST_SIGNATURE =
+  '3VurVYpBp2c8ma3W9hi72sNHUCx9hAcS5xwrYs2rUdfvVhFD7NzeSEkJv9Ga4VhgJiHr3ckTM9xfLHNYx1d2UW8F'; // 需要填入一个 Moonshot swap 交易签名
 
 describe('DEX Swap Parser', () => {
   let connection: Connection;
@@ -48,10 +53,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing RAYDIUM swap parsing...');
       const result = await parser.parseTransaction(RAYDIUM_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('RAYDIUM Swap Result:', JSON.stringify(data, null, 2));
 
@@ -72,10 +77,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing ORCA swap parsing...');
       const result = await parser.parseTransaction(ORCA_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('ORCA Swap Result:', JSON.stringify(data, null, 2));
 
@@ -96,10 +101,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing JUPITER swap parsing...');
       const result = await parser.parseTransaction(JUPITER_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('JUPITER Swap Result:', JSON.stringify(data, null, 2));
 
@@ -120,10 +125,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing METEORA swap parsing...');
       const result = await parser.parseTransaction(METEORA_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('METEORA Swap Result:', JSON.stringify(data, null, 2));
 
@@ -144,10 +149,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing PUMPFUN swap parsing...');
       const result = await parser.parseTransaction(PUMPFUN_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('PUMPFUN Swap Result:', JSON.stringify(data, null, 2));
 
@@ -168,10 +173,10 @@ describe('DEX Swap Parser', () => {
       await waitBetweenTests();
       console.log('Testing MOONSHOT swap parsing...');
       const result = await parser.parseTransaction(MOONSHOT_TEST_SIGNATURE);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      
+
       const data = result.data!;
       console.log('MOONSHOT Swap Result:', JSON.stringify(data, null, 2));
 

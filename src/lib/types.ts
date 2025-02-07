@@ -67,26 +67,26 @@ export const PROGRAM_IDS = {
 export const PROGRAM_MAPPINGS: Record<string, string> = {
   // Raydium
   '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8': AmmType.RAYDIUM,
-  'routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS': AmmType.RAYDIUM,
-  'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C': AmmType.RAYDIUM,
-  
+  routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS: AmmType.RAYDIUM,
+  CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C: AmmType.RAYDIUM,
+
   // Orca
-  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc': AmmType.ORCA,
+  whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc: AmmType.ORCA,
   '8i97DHS9KPnG311fSY9yin4cyk9ZzkBjLXobyEFvtfKY': AmmType.ORCA,
   '4ngnN8dA9sAf1sbz3m6qwquxbHkyzgXVpeTYcxKPtZuf': AmmType.ORCA,
-  
+
   // Jupiter
-  'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4': AmmType.JUPITER,
-  
+  JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: AmmType.JUPITER,
+
   // Meteora
-  'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K': AmmType.METEORA,
-  'HzwtjANeVzJPpnXTYt9MYMjVmkhTMfUyS8pJWqSRWLNr': AmmType.METEORA,
-  
+  M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K: AmmType.METEORA,
+  HzwtjANeVzJPpnXTYt9MYMjVmkhTMfUyS8pJWqSRWLNr: AmmType.METEORA,
+
   // Pumpfun
   '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': AmmType.PUMPFUN,
-  
+
   // Moonshot
-  'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG': AmmType.MOONSHOT,
+  MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG: AmmType.MOONSHOT,
 };
 
 // 主要导出函数类型
@@ -95,7 +95,7 @@ export type ParseSwapTransaction = (signature: string) => Promise<ParseResult>;
 // Raydium 指令类型
 export enum RaydiumInstructionType {
   Initialize = 0,
-  Swap = 1,          // 看起来 swap 指令代码应该是 1 而不是 9
+  Swap = 1, // 看起来 swap 指令代码应该是 1 而不是 9
   DepositAll = 2,
   WithdrawAll = 3,
   // ... 其他指令
