@@ -290,74 +290,60 @@ export class TransactionParser {
       const data = swapIx.data;
       console.log('Orca swap instruction data:', data.toString('hex'));
 
-      // 不同于 Raydium，Orca 的数据布局可能不同
-      // 我们可以:
-      // 1. 直接从 token balances 获取金额
-      // 2. 从 inner instructions 获取转账金额
-      // 3. 或者尝试解析不同的指令代码
+      // Orca 的指令数据结构：
+      // 1 byte: instruction code
+      // 8 bytes: amount in
+      // 8 bytes: minimum amount out
+      const amountIn = parseU64(data, 1);  // 跳过第一个字节的指令码
+      const minAmountOut = parseU64(data, 9);
+
+      console.log('Amount in:', amountIn.toString());
+      console.log('Minimum amount out:', minAmountOut.toString());
 
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log('Total accounts:', accounts.length);
+      console.log('Transaction accounts:', accounts.map(acc => acc.pubkey.toBase58()));
 
-      // 获取账户索引
-      const accountIndexes = swapIx.accounts.map(acc => 
-        accounts.findIndex(key => key.pubkey.equals(acc))
-      );
+      // Orca 的账户布局：
+      // 0: user authority
+      // 1: token program
+      // 2: user source token account
+      // 3: user destination token account
+      const userAuthority = accounts[0];
+      const sourceTokenAccount = accounts[2];
+      const destTokenAccount = accounts[3];
 
-      if (accountIndexes.includes(-1)) {
-        throw new SwapParseError('无法找到对应的账户', ErrorCodes.INVALID_TOKEN_ACCOUNT);
+      // 获取代币账户的 mint 地址
+      const sourceTokenInfo = await this.connection.getAccountInfo(sourceTokenAccount.pubkey);
+      const destTokenInfo = await this.connection.getAccountInfo(destTokenAccount.pubkey);
+
+      if (!sourceTokenInfo || !destTokenInfo) {
+        throw new SwapParseError('无法获取代币账户信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
       }
 
-      // 从 token balances 中获取代币信息和金额
-      const preBalances = transaction.meta?.preTokenBalances || [];
-      const postBalances = transaction.meta?.postTokenBalances || [];
-
-      // 找到变化最大的两个账户作为输入和输出
-      const balanceChanges = postBalances.map(post => {
-        const pre = preBalances.find(p => p.accountIndex === post.accountIndex);
-        return {
-          accountIndex: post.accountIndex,
-          mint: post.mint,
-          change: BigInt(post.uiTokenAmount.amount) - BigInt(pre?.uiTokenAmount.amount || '0'),
-          decimals: post.uiTokenAmount.decimals
-        };
-      });
-
-      // 按变化绝对值排序
-      balanceChanges.sort((a, b) => 
-        Math.abs(Number(b.change)) - Math.abs(Number(a.change))
-      );
-
-      if (balanceChanges.length < 2) {
-        throw new SwapParseError('无法确定交易代币', ErrorCodes.INVALID_TOKEN_ACCOUNT);
-      }
-
-      // 最大负变化是输入代币，最大正变化是输出代币
-      const [inChange, outChange] = balanceChanges;
-      
-      // 获取用户账户
-      const userOwner = accounts[accountIndexes[0]].pubkey;
+      // Token 账户的前 32 字节是 mint 地址
+      const sourceMint = new PublicKey(sourceTokenInfo.data.slice(0, 32));
+      const destMint = new PublicKey(destTokenInfo.data.slice(0, 32));
 
       // 获取代币信息
       const [sourceToken, destToken] = await Promise.all([
-        SwapState.getTokenInfo(inChange.mint),
-        SwapState.getTokenInfo(outChange.mint)
+        SwapState.getTokenInfo(sourceMint.toBase58()),
+        SwapState.getTokenInfo(destMint.toBase58())
       ]);
 
       return {
-        Signers: [userOwner.toBase58()],
+        Signers: [userAuthority.pubkey.toBase58()],
         Signatures: [transaction.transaction.signatures[0]],
         AMMs: amms,
         Timestamp: transaction.blockTime
           ? new Date(transaction.blockTime * 1000).toISOString()
           : new Date(0).toISOString(),
         TokenInMint: sourceToken.address,
-        TokenInAmount: (-inChange.change).toString(),
-        TokenInDecimals: inChange.decimals,
+        TokenInAmount: amountIn.toString(10),
+        TokenInDecimals: sourceToken.decimals,
         TokenOutMint: destToken.address,
-        TokenOutAmount: outChange.change.toString(),
-        TokenOutDecimals: outChange.decimals,
+        TokenOutAmount: minAmountOut.toString(10),
+        TokenOutDecimals: destToken.decimals,
       };
     } else if (amms.includes(AmmType.JUPITER)) {
       // Jupiter 可能会通过其他 AMM 执行 swap
@@ -474,6 +460,146 @@ export class TransactionParser {
         Signatures: [transaction.transaction.signatures[0]],
         AMMs: amms,
         Timestamp: transaction.blockTime 
+          ? new Date(transaction.blockTime * 1000).toISOString()
+          : new Date(0).toISOString(),
+        TokenInMint: sourceToken.address,
+        TokenInAmount: amountIn.toString(10),
+        TokenInDecimals: sourceToken.decimals,
+        TokenOutMint: destToken.address,
+        TokenOutAmount: minAmountOut.toString(10),
+        TokenOutDecimals: destToken.decimals,
+      };
+    } else if (amms.includes(AmmType.PUMPFUN)) {
+      // 找到 Pumpfun 的指令
+      swapIx = instructions.find(ix => 
+        ix.programId.toBase58() === programId
+      );
+
+      if (!swapIx) {
+        throw new SwapParseError('找不到 swap 指令', ErrorCodes.INVALID_INSTRUCTION);
+      }
+
+      const data = swapIx.data;
+      console.log('Pumpfun swap instruction data:', data.toString('hex'));
+
+      // Pumpfun 的指令数据结构：
+      // 1 byte: instruction code (0x01 for swap)
+      // 8 bytes: amount in
+      // 8 bytes: minimum amount out
+      const amountIn = parseU64(data, 1);  // 跳过第一个字节的指令码
+      const minAmountOut = parseU64(data, 9);
+
+      console.log('Amount in:', amountIn.toString());
+      console.log('Minimum amount out:', minAmountOut.toString());
+
+      // 从交易的 message 中获取账户
+      const accounts = transaction.transaction.message.accountKeys;
+      console.log('Transaction accounts:', accounts.map(acc => acc.pubkey.toBase58()));
+
+      // Pumpfun 的账户布局：
+      // 0: user authority
+      // 1: user source token account
+      // 2: user destination token account
+      // 3: pool source token account
+      // 4: pool destination token account
+      // 5: token program
+      const userAuthority = accounts[0];
+      const sourceTokenAccount = accounts[1];
+      const destTokenAccount = accounts[2];
+
+      // 获取代币账户的 mint 地址
+      const sourceTokenInfo = await this.connection.getAccountInfo(sourceTokenAccount.pubkey);
+      const destTokenInfo = await this.connection.getAccountInfo(destTokenAccount.pubkey);
+
+      if (!sourceTokenInfo || !destTokenInfo) {
+        throw new SwapParseError('无法获取代币账户信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
+      }
+
+      // Token 账户的前 32 字节是 mint 地址
+      const sourceMint = new PublicKey(sourceTokenInfo.data.slice(0, 32));
+      const destMint = new PublicKey(destTokenInfo.data.slice(0, 32));
+
+      // 获取代币信息
+      const [sourceToken, destToken] = await Promise.all([
+        SwapState.getTokenInfo(sourceMint.toBase58()),
+        SwapState.getTokenInfo(destMint.toBase58())
+      ]);
+
+      return {
+        Signers: [userAuthority.pubkey.toBase58()],
+        Signatures: [transaction.transaction.signatures[0]],
+        AMMs: amms,
+        Timestamp: transaction.blockTime
+          ? new Date(transaction.blockTime * 1000).toISOString()
+          : new Date(0).toISOString(),
+        TokenInMint: sourceToken.address,
+        TokenInAmount: amountIn.toString(10),
+        TokenInDecimals: sourceToken.decimals,
+        TokenOutMint: destToken.address,
+        TokenOutAmount: minAmountOut.toString(10),
+        TokenOutDecimals: destToken.decimals,
+      };
+    } else if (amms.includes(AmmType.MOONSHOT)) {
+      // 找到 Moonshot 的指令
+      swapIx = instructions.find(ix => 
+        ix.programId.toBase58() === programId
+      );
+
+      if (!swapIx) {
+        throw new SwapParseError('找不到 swap 指令', ErrorCodes.INVALID_INSTRUCTION);
+      }
+
+      const data = swapIx.data;
+      console.log('Moonshot swap instruction data:', data.toString('hex'));
+
+      // Moonshot 的指令数据结构：
+      // 1 byte: instruction code
+      // 8 bytes: amount in
+      // 8 bytes: minimum amount out
+      const amountIn = parseU64(data, 1);  // 跳过第一个字节的指令码
+      const minAmountOut = parseU64(data, 9);
+
+      console.log('Amount in:', amountIn.toString());
+      console.log('Minimum amount out:', minAmountOut.toString());
+
+      // 从交易的 message 中获取账户
+      const accounts = transaction.transaction.message.accountKeys;
+      console.log('Transaction accounts:', accounts.map(acc => acc.pubkey.toBase58()));
+
+      // Moonshot 的账户布局：
+      // 0: user authority
+      // 1: user source token account
+      // 2: user destination token account
+      // 3: pool source token account
+      // 4: pool destination token account
+      // 5: token program
+      const userAuthority = accounts[0];
+      const sourceTokenAccount = accounts[1];
+      const destTokenAccount = accounts[2];
+
+      // 获取代币账户的 mint 地址
+      const sourceTokenInfo = await this.connection.getAccountInfo(sourceTokenAccount.pubkey);
+      const destTokenInfo = await this.connection.getAccountInfo(destTokenAccount.pubkey);
+
+      if (!sourceTokenInfo || !destTokenInfo) {
+        throw new SwapParseError('无法获取代币账户信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
+      }
+
+      // Token 账户的前 32 字节是 mint 地址
+      const sourceMint = new PublicKey(sourceTokenInfo.data.slice(0, 32));
+      const destMint = new PublicKey(destTokenInfo.data.slice(0, 32));
+
+      // 获取代币信息
+      const [sourceToken, destToken] = await Promise.all([
+        SwapState.getTokenInfo(sourceMint.toBase58()),
+        SwapState.getTokenInfo(destMint.toBase58())
+      ]);
+
+      return {
+        Signers: [userAuthority.pubkey.toBase58()],
+        Signatures: [transaction.transaction.signatures[0]],
+        AMMs: amms,
+        Timestamp: transaction.blockTime
           ? new Date(transaction.blockTime * 1000).toISOString()
           : new Date(0).toISOString(),
         TokenInMint: sourceToken.address,

@@ -44,6 +44,8 @@ export const AmmType = {
   ORCA: 'ORCA',
   JUPITER: 'JUPITER',
   METEORA: 'METEORA',
+  PUMPFUN: 'PUMPFUN',
+  MOONSHOT: 'MOONSHOT',
   RAYDIUM_CL: 'RAYDIUM_CL',
 } as const;
 
@@ -56,6 +58,8 @@ export const PROGRAM_IDS = {
   ORCA: 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
   JUPITER: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
   METEORA: 'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K',
+  PUMPFUN: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+  MOONSHOT: 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
   RAYDIUM_CL: '9rpQHSyFVM1dkkHFQ2TtTzPEW7DVmEyPmN8wVniqJtuC',
 } as const;
 
@@ -77,6 +81,12 @@ export const PROGRAM_MAPPINGS: Record<string, string> = {
   // Meteora
   'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K': AmmType.METEORA,
   'HzwtjANeVzJPpnXTYt9MYMjVmkhTMfUyS8pJWqSRWLNr': AmmType.METEORA,
+  
+  // Pumpfun
+  '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': AmmType.PUMPFUN,
+  
+  // Moonshot
+  'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG': AmmType.MOONSHOT,
 };
 
 // 主要导出函数类型
