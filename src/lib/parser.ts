@@ -146,7 +146,6 @@ export class TransactionParser {
     programId: string
   ): Promise<SwapInfo> {
     console.log('Processing swap data...');
-    
     let swapIx: InstructionData | undefined;
     
     if (amms.includes(AmmType.RAYDIUM)) {
@@ -361,16 +360,12 @@ export class TransactionParser {
         TokenOutDecimals: outChange.decimals,
       };
     } else if (amms.includes(AmmType.JUPITER)) {
-      // 找到 Jupiter 的指令
-      swapIx = instructions.find(ix => 
-        ix.programId.toBase58() === programId
-      );
+      // Jupiter 可能会通过其他 AMM 执行 swap
+      // 我们需要检查 inner instructions
+      const innerInstructions = transaction.meta?.innerInstructions || [];
+      console.log('Jupiter inner instructions:', innerInstructions);
 
-      if (!swapIx) {
-        throw new SwapParseError('找不到 swap 指令', ErrorCodes.INVALID_INSTRUCTION);
-      }
-
-      // Jupiter 也可以使用相同的余额变化检测方法
+      // 从 token balances 中获取代币信息和金额
       const preBalances = transaction.meta?.preTokenBalances || [];
       const postBalances = transaction.meta?.postTokenBalances || [];
 
@@ -396,9 +391,9 @@ export class TransactionParser {
 
       // 最大负变化是输入代币，最大正变化是输出代币
       const [inChange, outChange] = balanceChanges;
-      
-      // 获取用户账户
-      const userOwner = accounts[accountIndexes[0]].pubkey;
+
+      // 获取用户账户 - Jupiter 通常是第一个账户
+      const userAuthority = transaction.transaction.message.accountKeys[0];
 
       // 获取代币信息
       const [sourceToken, destToken] = await Promise.all([
@@ -407,7 +402,7 @@ export class TransactionParser {
       ]);
 
       return {
-        Signers: [userOwner.toBase58()],
+        Signers: [userAuthority.pubkey.toBase58()],
         Signatures: [transaction.transaction.signatures[0]],
         AMMs: amms,
         Timestamp: transaction.blockTime
@@ -419,6 +414,74 @@ export class TransactionParser {
         TokenOutMint: destToken.address,
         TokenOutAmount: outChange.change.toString(),
         TokenOutDecimals: outChange.decimals,
+      };
+    } else if (amms.includes(AmmType.METEORA)) {
+      // 找到 Meteora 的指令
+      swapIx = instructions.find(ix => 
+        ix.programId.toBase58() === programId
+      );
+
+      if (!swapIx) {
+        throw new SwapParseError('找不到 swap 指令', ErrorCodes.INVALID_INSTRUCTION);
+      }
+
+      const data = swapIx.data;
+      console.log('Meteora swap instruction data:', data.toString('hex'));
+
+      // Meteora 的指令数据结构：
+      // 1 byte: instruction code (2 for swap)
+      // 8 bytes: amount in
+      // 8 bytes: minimum amount out
+      const amountIn = parseU64(data, 1);  // 跳过第一个字节的指令码
+      const minAmountOut = parseU64(data, 9);
+
+      console.log('Amount in:', amountIn.toString());
+      console.log('Minimum amount out:', minAmountOut.toString());
+
+      // 从交易的 message 中获取账户
+      const accounts = transaction.transaction.message.accountKeys;
+      console.log('Transaction accounts:', accounts.map(acc => acc.pubkey.toBase58()));
+
+      // Meteora 的账户布局：
+      // 0: user authority
+      // 1: token program
+      // 2: user source token account
+      // 3: user destination token account
+      const userAuthority = accounts[0];
+      const sourceTokenAccount = accounts[2];
+      const destTokenAccount = accounts[3];
+
+      // 获取代币账户的 mint 地址
+      const sourceTokenInfo = await this.connection.getAccountInfo(sourceTokenAccount.pubkey);
+      const destTokenInfo = await this.connection.getAccountInfo(destTokenAccount.pubkey);
+
+      if (!sourceTokenInfo || !destTokenInfo) {
+        throw new SwapParseError('无法获取代币账户信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
+      }
+
+      // Token 账户的前 32 字节是 mint 地址
+      const sourceMint = new PublicKey(sourceTokenInfo.data.slice(0, 32));
+      const destMint = new PublicKey(destTokenInfo.data.slice(0, 32));
+
+      // 获取代币信息
+      const [sourceToken, destToken] = await Promise.all([
+        SwapState.getTokenInfo(sourceMint.toBase58()),
+        SwapState.getTokenInfo(destMint.toBase58())
+      ]);
+
+      return {
+        Signers: [userAuthority.pubkey.toBase58()],
+        Signatures: [transaction.transaction.signatures[0]],
+        AMMs: amms,
+        Timestamp: transaction.blockTime 
+          ? new Date(transaction.blockTime * 1000).toISOString()
+          : new Date(0).toISOString(),
+        TokenInMint: sourceToken.address,
+        TokenInAmount: amountIn.toString(10),
+        TokenInDecimals: sourceToken.decimals,
+        TokenOutMint: destToken.address,
+        TokenOutAmount: minAmountOut.toString(10),
+        TokenOutDecimals: destToken.decimals,
       };
     }
 

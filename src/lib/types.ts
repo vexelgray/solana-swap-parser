@@ -76,6 +76,7 @@ export const PROGRAM_MAPPINGS: Record<string, string> = {
   
   // Meteora
   'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K': AmmType.METEORA,
+  'HzwtjANeVzJPpnXTYt9MYMjVmkhTMfUyS8pJWqSRWLNr': AmmType.METEORA,
 };
 
 // 主要导出函数类型
