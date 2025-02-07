@@ -1,6 +1,22 @@
 import { BN } from 'bn.js';
 export { withRetry } from './retry';
 
+let enableDebugLogs = false;
+
+export function setDebugLogs(enable: boolean) {
+  enableDebugLogs = enable;
+}
+
+function log(message: string) {
+  if (enableDebugLogs) {
+    console.log(message);
+  }
+}
+
+function logError(message: string) {
+  console.error(message);
+}
+
 export function toUiAmount(amount: BN | bigint, decimals: number): number {
   const divisor = new BN(10).pow(new BN(decimals));
   let amountBN: BN;
@@ -12,6 +28,7 @@ export function toUiAmount(amount: BN | bigint, decimals: number): number {
   }
 
   if (!BN.isBN(amountBN)) {
+    logError('Invalid amount type for conversion');
     return 0;
   }
 
@@ -26,6 +43,7 @@ export function fromUiAmount(amount: number, decimals: number): BN {
 }
 
 export function sleep(ms: number): Promise<void> {
+  log(`Sleeping for ${ms}ms`);
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -35,13 +53,14 @@ export function parseTokenAccount(accountInfo: any): string {
       return accountInfo.parsed.info.mint;
     }
   } catch (e) {
-    console.error('Error parsing token account:', e);
+    logError(`Error parsing token account: ${e}`);
   }
   return '';
 }
 
 export function parseU64(buffer: Buffer, offset: number = 0): BN {
   const bn = new BN(buffer.slice(offset, offset + 8), undefined, 'le');
+  log(`Parsed U64: ${bn.toString()}`);
   return bn;
 }
 

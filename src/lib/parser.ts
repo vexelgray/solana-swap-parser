@@ -20,26 +20,37 @@ import { parseU64 } from './utils';
 
 export class TransactionParser {
   private connection: Connection;
+  private enableDebugLogs: boolean;
 
-  constructor(connection: Connection) {
+  constructor(connection: Connection, enableDebugLogs: boolean = false) {
     this.connection = connection;
+    this.enableDebugLogs = enableDebugLogs;
+  }
+
+  private log(message: string) {
+    if (this.enableDebugLogs) {
+      console.log(message);
+    }
+  }
+
+  private logError(message: string) {
+    console.error(message);
   }
 
   async parseTransaction(signature: string): Promise<ParseResult> {
     try {
-      console.log('\nStarting transaction parsing...');
-      console.log('Signature:', signature);
+      this.log(`Processing transaction: ${signature}`);
 
       // 验证签名格式
       if (!/^[A-Za-z0-9]{32,}$/.test(signature)) {
-        console.log('Invalid signature format');
+        this.logError('Invalid signature format');
         throw new SwapParseError(
           ErrorMessages[ErrorCodes.INVALID_SIGNATURE],
           ErrorCodes.INVALID_SIGNATURE
         );
       }
 
-      console.log('Fetching transaction data...');
+      this.log('Fetching transaction data...');
       const transaction = await withRetry(() =>
         this.connection.getParsedTransaction(signature, {
           maxSupportedTransactionVersion: 0,
@@ -47,45 +58,41 @@ export class TransactionParser {
       );
 
       if (!transaction) {
-        console.log('Transaction not found');
+        this.logError('Transaction not found');
         throw new SwapParseError(
           ErrorMessages[ErrorCodes.TRANSACTION_NOT_FOUND],
           ErrorCodes.TRANSACTION_NOT_FOUND
         );
       }
 
-      console.log('Transaction found, parsing instructions...');
-      // 解析交易指令
+      this.log('Parsing instructions...');
       const instructions = this.parseInstructions(transaction);
-      console.log(`Found ${instructions.length} instructions`);
 
       if (instructions.length === 0) {
-        console.log('No instructions found in transaction');
+        this.logError('No instructions found in transaction');
         throw new SwapParseError('交易中没有找到任何指令', ErrorCodes.INVALID_INSTRUCTION);
       }
 
-      // 识别所有涉及的AMM
-      console.log('Identifying AMMs...');
       const { amms, programId } = this.identifyAmms(instructions);
-      console.log('Found AMMs:', amms);
-      console.log('Using program ID:', programId);
+      this.log(`Identified AMMs: ${amms.join(', ')}`);
 
       if (amms.length === 0) {
-        console.log('No supported AMM found');
+        this.logError('No supported AMM found');
         throw new SwapParseError('未找到支持的AMM', ErrorCodes.UNKNOWN_AMM);
       }
 
-      // 解析swap数据
-      console.log('Processing swap data...');
       const swapInfo = await this.processSwapData(instructions, transaction, amms, programId);
-      console.log('Swap data processed successfully');
+      this.log('Successfully processed swap data');
 
       return {
         success: true,
         data: swapInfo,
       };
     } catch (error) {
-      console.error('Error during parsing:', error);
+      this.logError(
+        `Error during parsing: ${error instanceof Error ? error.message : String(error)}`
+      );
+
       if (error instanceof SwapParseError) {
         return {
           success: false,
@@ -108,14 +115,11 @@ export class TransactionParser {
   }
 
   private parseInstructions(transaction: ParsedTransactionWithMeta): InstructionData[] {
-    console.log('Parsing transaction instructions...');
+    this.log('Parsing transaction instructions...');
     const instructions: InstructionData[] = [];
 
-    transaction.transaction.message.instructions.forEach((ix: any, index: number) => {
-      console.log(`Processing instruction ${index + 1}...`);
+    transaction.transaction.message.instructions.forEach((ix: any) => {
       if ('programId' in ix && 'accounts' in ix && 'data' in ix) {
-        console.log(`Program ID: ${ix.programId}`);
-        console.log(`Number of accounts: ${ix.accounts.length}`);
         instructions.push({
           programId: new PublicKey(ix.programId),
           accounts: ix.accounts.map((acc: string) => new PublicKey(acc)),
@@ -128,19 +132,16 @@ export class TransactionParser {
   }
 
   private identifyAmms(instructions: InstructionData[]): { amms: string[]; programId: string } {
-    console.log('Identifying AMM types...');
     const amms = new Set<string>();
     let foundProgramId = '';
 
     for (const ix of instructions) {
       const programId = ix.programId.toBase58();
-      console.log('Checking program ID:', programId);
 
       const ammType = PROGRAM_MAPPINGS[programId];
       if (ammType) {
         amms.add(ammType);
-        foundProgramId = programId; // 保存找到的程序 ID
-        console.log(`Found ${ammType} AMM`);
+        foundProgramId = programId;
       }
     }
 
@@ -156,7 +157,6 @@ export class TransactionParser {
     amms: string[],
     programId: string
   ): Promise<SwapInfo> {
-    console.log('Processing swap data...');
     let swapIx: InstructionData | undefined;
 
     if (amms.includes(AmmType.RAYDIUM)) {
@@ -168,21 +168,12 @@ export class TransactionParser {
       }
 
       const data = swapIx.data;
-      console.log('Swap instruction data:', data.toString('hex'));
 
-      // Raydium 的指令数据结构：
-      // 1 byte: instruction code
-      // 8 bytes: amount in
-      // 8 bytes: minimum amount out
       const amountIn = parseU64(data, 1);
       const minAmountOut = parseU64(data, 9);
 
-      console.log('Amount in:', amountIn.toString());
-      console.log('Minimum amount out:', minAmountOut.toString());
-
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log('Total accounts:', accounts.length);
 
       // 获取账户索引
       const accountIndexes = swapIx.accounts.map((acc) =>
@@ -198,24 +189,15 @@ export class TransactionParser {
       const userDestTokenAccount = accounts[accountIndexes[16]].pubkey;
       const userOwner = accounts[accountIndexes[17]].pubkey;
 
-      console.log('User source token account:', userSourceTokenAccount.toBase58());
-      console.log('User dest token account:', userDestTokenAccount.toBase58());
-      console.log('User owner:', userOwner.toBase58());
-
       // 1. 从 token balances 中获取代币信息
       const preBalances = transaction.meta?.preTokenBalances || [];
       const postBalances = transaction.meta?.postTokenBalances || [];
 
       // 2. 从 inner instructions 中获取 SPL Token 转账信息
       const innerInstructions = transaction.meta?.innerInstructions || [];
-      console.log('Inner instructions:', innerInstructions);
 
       // 3. 从账户列表中获取 pool token accounts
       const poolAccounts = swapIx.accounts.slice(5, 7); // pool coin and pc accounts
-      console.log(
-        'Pool accounts:',
-        poolAccounts.map((acc) => acc.toBase58())
-      );
 
       // 尝试多种方式获取代币信息
       let sourceMint: PublicKey | undefined;
@@ -266,9 +248,6 @@ export class TransactionParser {
         throw new SwapParseError('无法获取代币信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
       }
 
-      console.log('Source mint:', sourceMint.toBase58());
-      console.log('Destination mint:', destMint.toBase58());
-
       // 获取代币信息
       const [sourceToken, destToken] = await Promise.all([
         SwapState.getTokenInfo(sourceMint.toBase58()),
@@ -298,24 +277,12 @@ export class TransactionParser {
       }
 
       const data = swapIx.data;
-      console.log('Orca swap instruction data:', data.toString('hex'));
 
-      // Orca 的指令数据结构：
-      // 1 byte: instruction code
-      // 8 bytes: amount in
-      // 8 bytes: minimum amount out
-      const amountIn = parseU64(data, 1); // 跳过第一个字节的指令码
+      const amountIn = parseU64(data, 1);
       const minAmountOut = parseU64(data, 9);
-
-      console.log('Amount in:', amountIn.toString());
-      console.log('Minimum amount out:', minAmountOut.toString());
 
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log(
-        'Transaction accounts:',
-        accounts.map((acc) => acc.pubkey.toBase58())
-      );
 
       // Orca 的账户布局：
       // 0: user authority
@@ -360,11 +327,6 @@ export class TransactionParser {
       };
     } else if (amms.includes(AmmType.JUPITER)) {
       // Jupiter 可能会通过其他 AMM 执行 swap
-      // 我们需要检查 inner instructions
-      const innerInstructions = transaction.meta?.innerInstructions || [];
-      console.log('Jupiter inner instructions:', innerInstructions);
-
-      // 从 token balances 中获取代币信息和金额
       const preBalances = transaction.meta?.preTokenBalances || [];
       const postBalances = transaction.meta?.postTokenBalances || [];
 
@@ -421,24 +383,12 @@ export class TransactionParser {
       }
 
       const data = swapIx.data;
-      console.log('Meteora swap instruction data:', data.toString('hex'));
 
-      // Meteora 的指令数据结构：
-      // 1 byte: instruction code (2 for swap)
-      // 8 bytes: amount in
-      // 8 bytes: minimum amount out
-      const amountIn = parseU64(data, 1); // 跳过第一个字节的指令码
+      const amountIn = parseU64(data, 1);
       const minAmountOut = parseU64(data, 9);
-
-      console.log('Amount in:', amountIn.toString());
-      console.log('Minimum amount out:', minAmountOut.toString());
 
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log(
-        'Transaction accounts:',
-        accounts.map((acc) => acc.pubkey.toBase58())
-      );
 
       // Meteora 的账户布局：
       // 0: user authority
@@ -490,24 +440,12 @@ export class TransactionParser {
       }
 
       const data = swapIx.data;
-      console.log('Pumpfun swap instruction data:', data.toString('hex'));
 
-      // Pumpfun 的指令数据结构：
-      // 1 byte: instruction code (0x01 for swap)
-      // 8 bytes: amount in
-      // 8 bytes: minimum amount out
-      const amountIn = parseU64(data, 1); // 跳过第一个字节的指令码
+      const amountIn = parseU64(data, 1);
       const minAmountOut = parseU64(data, 9);
-
-      console.log('Amount in:', amountIn.toString());
-      console.log('Minimum amount out:', minAmountOut.toString());
 
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log(
-        'Transaction accounts:',
-        accounts.map((acc) => acc.pubkey.toBase58())
-      );
 
       // Pumpfun 的账户布局：
       // 0: user authority
@@ -561,24 +499,12 @@ export class TransactionParser {
       }
 
       const data = swapIx.data;
-      console.log('Moonshot swap instruction data:', data.toString('hex'));
 
-      // Moonshot 的指令数据结构：
-      // 1 byte: instruction code
-      // 8 bytes: amount in
-      // 8 bytes: minimum amount out
-      const amountIn = parseU64(data, 1); // 跳过第一个字节的指令码
+      const amountIn = parseU64(data, 1);
       const minAmountOut = parseU64(data, 9);
-
-      console.log('Amount in:', amountIn.toString());
-      console.log('Minimum amount out:', minAmountOut.toString());
 
       // 从交易的 message 中获取账户
       const accounts = transaction.transaction.message.accountKeys;
-      console.log(
-        'Transaction accounts:',
-        accounts.map((acc) => acc.pubkey.toBase58())
-      );
 
       // Moonshot 的账户布局：
       // 0: user authority

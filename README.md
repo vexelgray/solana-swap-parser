@@ -1,5 +1,7 @@
 # Solana Swap Parser
 
+[中文文档](./README_zh.md)
+
 A TypeScript library specialized in parsing Solana DEX swap transaction results. This parser extracts detailed swap information from various Solana DEX transactions, focusing on the actual swap results and token transfers.
 
 ## Key Features
@@ -14,6 +16,7 @@ A TypeScript library specialized in parsing Solana DEX swap transaction results.
   - Transaction timestamp and signers
 - **Error Handling**: Robust error handling with detailed error messages
 - **Rate Limiting**: Built-in protection against RPC rate limits with automatic retries
+- **Configurable Logging**: Comprehensive debug logging system with granular control
 
 ## Supported DEXs
 
@@ -40,32 +43,76 @@ yarn add solana-swap-parser
 ```typescript
 import { Connection } from '@solana/web3.js';
 import { TransactionParser } from 'solana-swap-parser';
+import { SwapState } from 'solana-swap-parser';
+import { setDebugLogs } from 'solana-swap-parser';
 
-// Initialize connection and parser
+// Initialize connection
 const connection = new Connection('https://api.mainnet-beta.solana.com');
+
+// Production mode (no debug logs)
 const parser = new TransactionParser(connection);
 
-// Parse a swap transaction result
-const signature = 'your_transaction_signature';
-const result = await parser.parseTransaction(signature);
+// Development mode (with debug logs)
+const debugParser = new TransactionParser(connection, true);
+```
 
-if (result.success) {
-  console.log('Swap result:', result.data);
-  // {
-  //   Signers: string[],      // Transaction signers
-  //   Signatures: string[],   // Transaction signatures
-  //   AMMs: string[],        // DEX names used in the swap
-  //   Timestamp: string,     // Transaction timestamp
-  //   TokenInMint: string,   // Input token mint address
-  //   TokenInAmount: string, // Input amount
-  //   TokenInDecimals: number,
-  //   TokenOutMint: string,  // Output token mint address
-  //   TokenOutAmount: string,// Output amount
-  //   TokenOutDecimals: number
-  // }
-} else {
-  console.error('Error:', result.error);
-}
+### Logging Control
+
+The library provides granular control over debug logging for different components:
+
+```typescript
+// 1. Parser logging
+const parser = new TransactionParser(connection, true); // Enable parser logs
+
+// 2. Token state logging
+SwapState.setDebugLogs(true);  // Enable token state logs
+
+// 3. Utility function logging
+setDebugLogs(true);  // Enable utility logs
+
+// 4. Retry mechanism logging
+const result = await withRetry(
+  () => someOperation(),
+  { 
+    enableDebugLogs: true,
+    maxAttempts: 3 
+  }
+);
+```
+
+#### Log Categories
+
+When debug logging is enabled, you'll see information about:
+
+- Transaction Processing
+  - Transaction signature validation
+  - Instruction parsing
+  - AMM detection
+  - Swap data extraction
+
+- Token Operations
+  - Token account lookups
+  - Token mint info retrieval
+  - Balance calculations
+
+- Retry Mechanism
+  - Attempt counts
+  - Delay durations
+  - Rate limit handling
+
+- Utility Operations
+  - Number parsing
+  - Amount conversions
+  - Sleep durations
+
+### Production Usage
+
+For production environments, it's recommended to disable all debug logs:
+
+```typescript
+const parser = new TransactionParser(connection, false);
+SwapState.setDebugLogs(false);
+setDebugLogs(false);
 ```
 
 ### Advanced Usage
@@ -242,6 +289,16 @@ The parser may return the following error codes:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Acknowledgments
+
+This project's implementation was inspired by [solanaswap-go](https://github.com/franco-bianco/solanaswap-go). Thanks for their great work!
+
+## Support the Project
+
+If this project has saved you time, consider buying me a coffee:
+
+SOL Address: `DnqW4j7ZVtfqR1D3ZmNfHFatoLjYCpici1pzFaJmkmBd`
 
 ## License
 

@@ -5,6 +5,7 @@ export interface RetryOptions {
   initialDelay: number;
   maxDelay: number;
   backoffFactor: number;
+  enableDebugLogs?: boolean;
 }
 
 const defaultOptions: RetryOptions = {
@@ -12,7 +13,18 @@ const defaultOptions: RetryOptions = {
   initialDelay: 500,
   maxDelay: 10000,
   backoffFactor: 2,
+  enableDebugLogs: false,
 };
+
+function log(message: string, enableDebugLogs: boolean | undefined = false) {
+  if (enableDebugLogs) {
+    console.log(message);
+  }
+}
+
+function logError(message: string) {
+  console.error(message);
+}
 
 export async function withRetry<T>(
   operation: () => Promise<T>,
@@ -24,6 +36,7 @@ export async function withRetry<T>(
 
   for (let attempt = 1; attempt <= finalOptions.maxAttempts; attempt++) {
     try {
+      log(`Attempt ${attempt}/${finalOptions.maxAttempts}`, finalOptions.enableDebugLogs);
       return await operation();
     } catch (error) {
       lastError = error as Error;
@@ -33,9 +46,13 @@ export async function withRetry<T>(
       }
 
       if (error instanceof Error && error.message.includes('429')) {
-        console.warn(`Rate limited. Retrying after ${delay}ms delay...`);
+        logError(`Rate limited on attempt ${attempt}. Retrying after ${delay}ms delay...`);
       }
 
+      log(
+        `Retry attempt ${attempt} failed, waiting ${delay}ms before next attempt`,
+        finalOptions.enableDebugLogs
+      );
       await sleep(delay);
       delay = Math.min(delay * finalOptions.backoffFactor, finalOptions.maxDelay);
     }
