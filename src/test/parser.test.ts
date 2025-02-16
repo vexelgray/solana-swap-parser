@@ -6,7 +6,7 @@ import { sleep } from '../lib/utils';
 
 // Raydium swap 交易签名
 const RAYDIUM_TEST_SIGNATURE =
-  '3JWAkycz9cLt647dWAiua13WxV38kqBHyeuVvBxErJd5R3SZ7Rp982vsBxC8RBwTeLvLPa8KFWfVZp3dpWUqSpq2';
+  '41od8ZzniFfHMNx3JznuGE9bAe58fBGeyic92KFBSbb5TWtQsr48n6YqXPtnEGscWt1R1ZXpeMdqus9HgjcVT3vN';
 
 // Orca swap 交易签名
 const ORCA_TEST_SIGNATURE =

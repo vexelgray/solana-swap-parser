@@ -1,6 +1,6 @@
 {
   "name": "solana-swap-parser",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A TypeScript library for parsing Solana DEX swap transaction results",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

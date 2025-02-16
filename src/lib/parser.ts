@@ -264,10 +264,17 @@ export class TransactionParser {
         throw new SwapParseError('无法获取代币信息', ErrorCodes.INVALID_TOKEN_ACCOUNT);
       }
 
-      // 获取代币信息
+      // 获取代币信息 - 优化：只在必要时调用 getTokenInfo
+      const sourceTokenDecimals = sourceBalance?.uiTokenAmount?.decimals;
+      const destTokenDecimals = destBalance?.uiTokenAmount?.decimals;
+
       const [sourceToken, destToken] = await Promise.all([
-        SwapState.getTokenInfo(sourceMint.toBase58()),
-        SwapState.getTokenInfo(destMint.toBase58()),
+        sourceTokenDecimals !== undefined
+          ? { address: sourceMint.toBase58(), decimals: sourceTokenDecimals }
+          : SwapState.getTokenInfo(sourceMint.toBase58()),
+        destTokenDecimals !== undefined
+          ? { address: destMint.toBase58(), decimals: destTokenDecimals }
+          : SwapState.getTokenInfo(destMint.toBase58()),
       ]);
 
       return {

@@ -3,10 +3,10 @@ import { PublicKey } from '@solana/web3.js';
 // Token信息接口
 export interface TokenInfo {
   address: string;
-  chainId: number;
   decimals: number;
-  name: string;
-  symbol: string;
+  chainId?: number;
+  name?: string;
+  symbol?: string;
   logoURI?: string;
 }
 
