@@ -48,7 +48,7 @@ export class OrcaParser implements AmmParser {
     // 获取完整的账户列表
     const { accounts } = getTransactionAccounts(transaction);
 
-    // 找到 Orca 的指令，检查所有可能的程序 ID
+    // 找到 Orca 的指令
     const swapIx = transaction.transaction.message.instructions.find(
       (ix) =>
         'programId' in ix &&
@@ -61,44 +61,38 @@ export class OrcaParser implements AmmParser {
       throw new Error('找不到 swap 指令');
     }
 
-    const data = Buffer.from(swapIx.data, 'base64');
-
-    const amountIn = parseU64(data, 1);
-    const minAmountOut = parseU64(data, 9);
-
-    // 从交易的 message 中获取账户
-    const accountIndexes = swapIx.accounts.map((acc: PublicKey) =>
-      accounts.findIndex((key) => key === acc.toString())
-    );
-
-    if (accountIndexes.includes(-1)) {
-      throw new Error('无法找到对应的账户');
-    }
-
-    // Orca 的账户布局：
-    // 0: token program
-    // 1: amm
-    // 2: amm authority
-    // 3: source token account
-    // 4: dest token account
-    // 5: user source token account
-    // 6: user dest token account
-    // 7: user authority
-    const userSourceTokenAccount = new PublicKey(accounts[accountIndexes[5]]);
-    const userDestTokenAccount = new PublicKey(accounts[accountIndexes[6]]);
-    const userAuthority = new PublicKey(accounts[accountIndexes[7]]);
-
     // 从 token balances 中获取代币信息
     const preBalances = transaction.meta?.preTokenBalances || [];
     const postBalances = transaction.meta?.postTokenBalances || [];
 
-    // 尝试从 token balances 中查找代币信息
-    const sourceBalance = preBalances.find((b) =>
-      new PublicKey(accounts[b.accountIndex]).equals(userSourceTokenAccount)
-    );
-    const destBalance = postBalances.find((b) =>
-      new PublicKey(accounts[b.accountIndex]).equals(userDestTokenAccount)
-    );
+    // 计算每个账户的余额变化
+    const balanceChanges = preBalances
+      .map((pre) => {
+        const post = postBalances.find((p) => p.accountIndex === pre.accountIndex);
+        if (!post) return null;
+
+        const preAmount = BigInt(pre.uiTokenAmount.amount);
+        const postAmount = BigInt(post.uiTokenAmount.amount);
+        const change = postAmount - preAmount;
+
+        return {
+          accountIndex: pre.accountIndex,
+          mint: pre.mint,
+          owner: pre.owner,
+          decimals: pre.uiTokenAmount.decimals,
+          change,
+          absChange: change < 0n ? -change : change,
+          preAmount: pre.uiTokenAmount.amount,
+          postAmount: post.uiTokenAmount.amount,
+        };
+      })
+      .filter((change): change is NonNullable<typeof change> => change !== null)
+      // 按变化的绝对值排序
+      .sort((a, b) => Number(b.absChange - a.absChange));
+
+    // 找到变化最大的两个账户，负变化为输入，正变化为输出
+    const sourceBalance = balanceChanges.find((b) => b.change < 0n);
+    const destBalance = balanceChanges.find((b) => b.change > 0n && b.mint !== sourceBalance?.mint);
 
     if (!sourceBalance?.mint || !destBalance?.mint) {
       throw new Error('无法获取代币信息');
@@ -106,22 +100,22 @@ export class OrcaParser implements AmmParser {
 
     // 获取代币信息
     const [sourceToken, destToken] = await Promise.all([
-      SwapState.getTokenInfo(sourceBalance.mint, sourceBalance.uiTokenAmount.decimals),
-      SwapState.getTokenInfo(destBalance.mint, destBalance.uiTokenAmount.decimals),
+      SwapState.getTokenInfo(sourceBalance.mint, sourceBalance.decimals),
+      SwapState.getTokenInfo(destBalance.mint, destBalance.decimals),
     ]);
 
     return {
-      Signers: [userAuthority.toString()],
+      Signers: [swapIx.accounts[7].toString()], // userAuthority is at index 7
       Signatures: [transaction.transaction.signatures[0]],
       AMMs: [AmmType.ORCA],
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
       TokenInMint: sourceToken.address,
-      TokenInAmount: amountIn.toString(),
+      TokenInAmount: (-sourceBalance.change).toString(),
       TokenInDecimals: sourceToken.decimals,
       TokenOutMint: destToken.address,
-      TokenOutAmount: minAmountOut.toString(),
+      TokenOutAmount: destBalance.change.toString(),
       TokenOutDecimals: destToken.decimals,
     };
   }

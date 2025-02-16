@@ -4,6 +4,20 @@ import { SwapState } from '../lib/state';
 import { AmmType } from '../lib/types';
 import { sleep } from '../lib/utils';
 
+// 测试日志控制
+const TEST_DEBUG = process.env.TEST_DEBUG === 'true';
+const testLog = (message: string) => {
+  if (TEST_DEBUG) {
+    console.log(message);
+  }
+};
+
+// 结果日志
+const logSwapResult = (amm: string, data: any) => {
+  console.log(`\n${amm} Swap Result:`);
+  console.log(JSON.stringify(data, null, 2));
+};
+
 // Raydium swap 交易签名
 const RAYDIUM_TEST_SIGNATURE =
   '4UCMpMpzoxDEf1xeT2dzRF8HJQpDYEpwqp5Y5pEiiWSgKKNo28nZ52WssBMG6SUZHwoWT5q4GvrVvwwNNQPfj1Ty';
@@ -26,7 +40,7 @@ const PUMPFUN_TEST_SIGNATURE =
 
 // Moonshot swap 交易签名
 const MOONSHOT_TEST_SIGNATURE =
-  '3VurVYpBp2c8ma3W9hi72sNHUCx9hAcS5xwrYs2rUdfvVhFD7NzeSEkJv9Ga4VhgJiHr3ckTM9xfLHNYx1d2UW8F'; // 需要填入一个 Moonshot swap 交易签名
+  '2tgbNtb3d67hGN3NhCSPdc1CWcAxj9a4KyJX7E8PVxkxHm3m2ots5ZNS3ehBcD43WZ92q6nXT9SLj4iHL6NoNxhr'; // 需要填入一个 Moonshot swap 交易签名
 
 describe('DEX Swap Parser', () => {
   let connection: Connection;
@@ -38,27 +52,26 @@ describe('DEX Swap Parser', () => {
       commitment: 'confirmed',
       confirmTransactionInitialTimeout: 30000,
     });
-    parser = new TransactionParser(connection);
+    parser = new TransactionParser(connection, false);
     SwapState.setConnection(connection);
+    SwapState.setDebugLogs(false);
   }, 120000);
 
   // 添加一个辅助函数来等待
   const waitBetweenTests = async () => {
-    console.log('Waiting between tests to avoid rate limits...');
     await sleep(5000); // 每个测试之间等待 5 秒
   };
 
   describe('Raydium Swap Parsing', () => {
     test('Should parse RAYDIUM swap', async () => {
       await waitBetweenTests();
-      console.log('Testing RAYDIUM swap parsing...');
       const result = await parser.parseTransaction(RAYDIUM_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('RAYDIUM Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('RAYDIUM', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);
@@ -75,14 +88,13 @@ describe('DEX Swap Parser', () => {
   describe('Orca Swap Parsing', () => {
     test('Should parse ORCA swap', async () => {
       await waitBetweenTests();
-      console.log('Testing ORCA swap parsing...');
       const result = await parser.parseTransaction(ORCA_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('ORCA Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('ORCA', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);
@@ -99,14 +111,13 @@ describe('DEX Swap Parser', () => {
   describe('Jupiter Swap Parsing', () => {
     test('Should parse JUPITER swap', async () => {
       await waitBetweenTests();
-      console.log('Testing JUPITER swap parsing...');
       const result = await parser.parseTransaction(JUPITER_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('JUPITER Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('JUPITER', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);
@@ -123,14 +134,13 @@ describe('DEX Swap Parser', () => {
   describe('Meteora Swap Parsing', () => {
     test('Should parse METEORA swap', async () => {
       await waitBetweenTests();
-      console.log('Testing METEORA swap parsing...');
       const result = await parser.parseTransaction(METEORA_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('METEORA Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('METEORA', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);
@@ -147,14 +157,13 @@ describe('DEX Swap Parser', () => {
   describe('Pumpfun Swap Parsing', () => {
     test('Should parse PUMPFUN swap', async () => {
       await waitBetweenTests();
-      console.log('Testing PUMPFUN swap parsing...');
       const result = await parser.parseTransaction(PUMPFUN_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('PUMPFUN Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('PUMPFUN', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);
@@ -171,14 +180,13 @@ describe('DEX Swap Parser', () => {
   describe('Moonshot Swap Parsing', () => {
     test('Should parse MOONSHOT swap', async () => {
       await waitBetweenTests();
-      console.log('Testing MOONSHOT swap parsing...');
       const result = await parser.parseTransaction(MOONSHOT_TEST_SIGNATURE);
 
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
 
       const data = result.data!;
-      console.log('MOONSHOT Swap Result:', JSON.stringify(data, null, 2));
+      logSwapResult('MOONSHOT', data);
 
       expect(Array.isArray(data.Signers)).toBe(true);
       expect(Array.isArray(data.Signatures)).toBe(true);

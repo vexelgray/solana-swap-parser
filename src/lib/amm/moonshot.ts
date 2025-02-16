@@ -4,7 +4,6 @@ import { ParsedTransactionWithMeta } from '@solana/web3.js';
 import { AmmParser, getTransactionAccounts } from './base';
 import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
 import { SwapState } from '../state';
-import { parseU64 } from '../utils';
 
 export enum MoonshotInstructionType {
   Swap = 1,
@@ -38,113 +37,118 @@ export interface MoonshotPoolInfo {
 }
 
 export class MoonshotParser implements AmmParser {
+  private enableDebugLogs: boolean = true;
+
+  private log(message: string) {
+    if (this.enableDebugLogs) {
+      console.log(`[Moonshot] ${message}`);
+    }
+  }
+
   canParse(programId: string): boolean {
     return programId === PROGRAM_IDS.MOONSHOT;
   }
 
   async parse(transaction: ParsedTransactionWithMeta, programId: string): Promise<SwapInfo> {
-    // 获取完整的账户列表
+    if (!transaction.meta?.postTokenBalances || !transaction.meta.preTokenBalances) {
+      throw new Error('Missing token balance information');
+    }
+
+    // Get the accounts list
     const { accounts } = getTransactionAccounts(transaction);
 
-    // 找到 Moonshot 的指令
-    const swapIx = transaction.transaction.message.instructions.find(
+    // Find Moonshot program invocation
+    const moonshotInstruction = transaction.transaction.message.instructions.find(
       (ix) => 'programId' in ix && ix.programId.toString() === PROGRAM_IDS.MOONSHOT
     ) as PartiallyDecodedInstruction;
 
-    if (!swapIx || !('data' in swapIx)) {
-      throw new Error('找不到 swap 指令');
+    if (!moonshotInstruction || !('accounts' in moonshotInstruction)) {
+      throw new Error('No Moonshot instruction found');
     }
 
-    const data = Buffer.from(swapIx.data, 'base64');
+    // Check if this is a Buy instruction
+    const logMessages = transaction.meta.logMessages || [];
+    const isBuyInstruction = logMessages.some((msg) => msg.includes('Instruction: Buy'));
+    if (!isBuyInstruction) {
+      throw new Error('Not a Moonshot Buy instruction');
+    }
 
-    const amountIn = parseU64(data, 1);
-    const minAmountOut = parseU64(data, 9);
-
-    // 从交易的 message 中获取账户
-    const accountIndexes = swapIx.accounts.map((acc: PublicKey) =>
+    // Get account indexes
+    const accountIndexes = moonshotInstruction.accounts.map((acc: PublicKey) =>
       accounts.findIndex((key) => key === acc.toString())
     );
 
     if (accountIndexes.includes(-1)) {
-      throw new Error('无法找到对应的账户');
+      throw new Error('Could not find all accounts');
     }
 
-    // Moonshot 的账户布局：
-    // 0: token program
-    // 1: pool
-    // 2: pool authority
-    // 3: source token account
-    // 4: dest token account
-    // 5: user source token account
-    // 6: user dest token account
-    // 7: user authority
-    const userSourceTokenAccount = new PublicKey(accounts[accountIndexes[5]]);
-    const userDestTokenAccount = new PublicKey(accounts[accountIndexes[6]]);
-    const userAuthority = new PublicKey(accounts[accountIndexes[7]]);
+    // Get the signer's public key (buyer's address)
+    const signerKey = transaction.transaction.message.accountKeys[0].pubkey.toString();
+    this.log(`Signer (buyer) address: ${signerKey}`);
 
-    // 从 token balances 中获取代币信息
-    const preBalances = transaction.meta?.preTokenBalances || [];
-    const postBalances = transaction.meta?.postTokenBalances || [];
+    // Get token balances
+    const { preTokenBalances, postTokenBalances } = transaction.meta;
 
-    console.log('Pre token balances:', JSON.stringify(preBalances, null, 2));
-    console.log('Post token balances:', JSON.stringify(postBalances, null, 2));
-
-    // 计算每个账户的余额变化
-    const balanceChanges = preBalances
-      .map((pre) => {
-        const post = postBalances.find((p) => p.accountIndex === pre.accountIndex);
-        if (!post) return null;
-
-        const preAmount = BigInt(pre.uiTokenAmount.amount);
-        const postAmount = BigInt(post.uiTokenAmount.amount);
-        const change = postAmount - preAmount;
-
-        return {
-          accountIndex: pre.accountIndex,
-          mint: pre.mint,
-          owner: pre.owner,
-          decimals: pre.uiTokenAmount.decimals,
-          change,
-        };
-      })
-      .filter((change): change is NonNullable<typeof change> => change !== null);
-
-    console.log('Balance changes:', balanceChanges);
-
-    // 找到变化最大的两个账户
-    balanceChanges.sort((a, b) => Number(b.change - a.change));
-
-    const sourceBalance = preBalances.find(
-      (b) => b.accountIndex === balanceChanges[1]?.accountIndex
+    // Find source account (user's account)
+    const sourceBalance = preTokenBalances.find(
+      (b) => b.owner === signerKey && b.uiTokenAmount.amount !== '0'
     );
-    const destBalance = preBalances.find((b) => b.accountIndex === balanceChanges[0]?.accountIndex);
 
-    console.log('Source balance:', sourceBalance);
-    console.log('Destination balance:', destBalance);
+    // Find destination account (pool's account)
+    const poolBalance = preTokenBalances.find(
+      (b) => b.owner !== signerKey && b.uiTokenAmount.amount !== '0'
+    );
 
-    if (!sourceBalance?.mint || !destBalance?.mint) {
-      throw new Error('无法获取代币信息');
+    if (!sourceBalance?.mint || !poolBalance?.mint) {
+      throw new Error('Could not find token information');
     }
 
-    // 获取代币信息
-    const [sourceToken, destToken] = await Promise.all([
-      SwapState.getTokenInfo(sourceBalance.mint, sourceBalance.uiTokenAmount.decimals),
-      SwapState.getTokenInfo(destBalance.mint, destBalance.uiTokenAmount.decimals),
-    ]);
+    if (!sourceBalance.owner || !poolBalance.owner) {
+      throw new Error('Could not find token owner information');
+    }
+
+    // Get pool's post balance
+    const poolPostBalance = postTokenBalances.find(
+      (b) => b.owner === poolBalance.owner && b.mint === poolBalance.mint
+    );
+
+    if (!poolPostBalance) {
+      throw new Error('Could not find pool post balance');
+    }
+
+    // Calculate actual output amount
+    const outputAmount =
+      BigInt(poolPostBalance.uiTokenAmount.amount) - BigInt(poolBalance.uiTokenAmount.amount);
+
+    // Get token info
+    const tokenInfo = await SwapState.getTokenInfo(
+      sourceBalance.mint,
+      sourceBalance.uiTokenAmount.decimals
+    );
+
+    this.log(`Source balance: ${sourceBalance.uiTokenAmount.amount}`);
+    this.log(`Pool balance: ${poolBalance.uiTokenAmount.amount}`);
+    this.log(`Pool post balance: ${poolPostBalance.uiTokenAmount.amount}`);
+    this.log(`Output amount: ${outputAmount.toString()}`);
 
     return {
-      Signers: [userAuthority.toString()],
+      Signers: [signerKey],
       Signatures: [transaction.transaction.signatures[0]],
       AMMs: [AmmType.MOONSHOT],
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
-      TokenInMint: sourceToken.address,
-      TokenInAmount: amountIn.toString(),
-      TokenInDecimals: sourceToken.decimals,
-      TokenOutMint: destToken.address,
-      TokenOutAmount: minAmountOut.toString(),
-      TokenOutDecimals: destToken.decimals,
+      TokenInMint: tokenInfo.address,
+      TokenInAmount: sourceBalance.uiTokenAmount.amount,
+      TokenInDecimals: sourceBalance.uiTokenAmount.decimals,
+      TokenOutMint: tokenInfo.address,
+      TokenOutAmount: abs(outputAmount).toString(),
+      TokenOutDecimals: poolPostBalance.uiTokenAmount.decimals,
     };
   }
+}
+
+// Helper function to get absolute value of bigint
+function abs(n: bigint): bigint {
+  return n < 0n ? -n : n;
 }

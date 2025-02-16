@@ -96,13 +96,13 @@ export class TransactionParser {
         swapInfo = await parser.parse(transaction, programId);
         this.log('Successfully processed swap data');
         if (swapInfo) {
-          console.log('Returning successful parse result with data:', swapInfo);
+          this.log('Successfully parsed swap data');
           return {
             success: true,
             data: swapInfo,
           };
         } else {
-          console.log('No swap info returned from parser');
+          this.logError('Parser returned no data');
           return {
             success: false,
             error: 'Parser returned no data',
@@ -110,9 +110,9 @@ export class TransactionParser {
         }
       } catch (error) {
         this.logError(`Error in AMM parser: ${error}`);
-        console.error('Full error details:', error);
+        this.logError(`Full error details: ${error}`);
         if (error instanceof Error) {
-          console.error('Stack trace:', error.stack);
+          this.logError(`Stack trace: ${error.stack}`);
         }
         return {
           success: false,
@@ -123,8 +123,8 @@ export class TransactionParser {
       this.logError(
         `Error during parsing: ${error instanceof Error ? error.message : String(error)}`
       );
-      console.error('Error details:', error);
-      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+      this.logError(`Error details: ${error}`);
+      this.logError(`Stack trace: ${error instanceof Error ? error.stack : 'No stack trace'}`);
 
       // 如果已经成功解析出数据，即使有非关键错误也返回成功
       if (error instanceof Error && error.message.includes('pubkey') && swapInfo) {
