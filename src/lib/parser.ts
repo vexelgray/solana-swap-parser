@@ -118,6 +118,7 @@ export class TransactionParser {
     this.log('Parsing transaction instructions...');
     const instructions: InstructionData[] = [];
 
+    // 解析主要指令
     transaction.transaction.message.instructions.forEach((ix: any) => {
       if ('programId' in ix && 'accounts' in ix && 'data' in ix) {
         instructions.push({
@@ -127,6 +128,21 @@ export class TransactionParser {
         });
       }
     });
+
+    // 解析内部指令
+    if (transaction.meta?.innerInstructions) {
+      transaction.meta.innerInstructions.forEach((inner) => {
+        inner.instructions.forEach((ix: any) => {
+          if ('programId' in ix && 'accounts' in ix && 'data' in ix) {
+            instructions.push({
+              programId: new PublicKey(ix.programId),
+              accounts: ix.accounts.map((acc: string) => new PublicKey(acc)),
+              data: Buffer.from(ix.data, 'base64'),
+            });
+          }
+        });
+      });
+    }
 
     return instructions;
   }
