@@ -1,6 +1,6 @@
 {
   "name": "solana-swap-parser",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A TypeScript library for parsing Solana DEX swap transaction results",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -33,7 +33,8 @@
   "scripts": {
     "build": "tsc",
     "prepare": "yarn build",
-    "test": "jest --config jest.config.js --verbose --forceExit",
+    "test": "jest --config jest.config.js --verbose",
+    "test:build": "yarn build && yarn test",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",

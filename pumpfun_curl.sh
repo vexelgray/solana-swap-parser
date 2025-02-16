@@ -1,0 +1,1 @@
+curl http://api.mainnet-beta.solana.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getTransaction","params":["2bz3AJVqx1LBZE1qcrqnqf8uFfwkeToufV1ZteZKXYmJEA4A89VAt5o7hJA8KgyKDGcHZLfNBpJgtT6a3UGCZn4r",{"encoding":"jsonParsed","maxSupportedTransactionVersion":0,"commitment":"confirmed"}]}'

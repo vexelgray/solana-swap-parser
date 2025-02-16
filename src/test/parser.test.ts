@@ -6,7 +6,7 @@ import { sleep } from '../lib/utils';
 
 // Raydium swap 交易签名
 const RAYDIUM_TEST_SIGNATURE =
-  '41od8ZzniFfHMNx3JznuGE9bAe58fBGeyic92KFBSbb5TWtQsr48n6YqXPtnEGscWt1R1ZXpeMdqus9HgjcVT3vN';
+  '4UCMpMpzoxDEf1xeT2dzRF8HJQpDYEpwqp5Y5pEiiWSgKKNo28nZ52WssBMG6SUZHwoWT5q4GvrVvwwNNQPfj1Ty';
 
 // Orca swap 交易签名
 const ORCA_TEST_SIGNATURE =
@@ -14,7 +14,7 @@ const ORCA_TEST_SIGNATURE =
 
 // Jupiter swap 交易签名
 const JUPITER_TEST_SIGNATURE =
-  '4Fr1GYVidxM9xMr2HCo62j3FdFYLcMZBFA4N3gTE4egxSxoir6erTXpHhx8JKoqscxxcfGTF4ruHMXiDfWSYJAZ7'; // 需要填入一个 Jupiter swap 交易签名
+  '43SjKmrivRCim9n6m86hgySQnzzs7h9GVEWm5mUfBaeHMFmNp9sYDDxXJfnZNiprmAWpxQbwamvf2vU3ByvEbSnR'; // 需要填入一个 Jupiter swap 交易签名
 
 // Meteora swap 交易签名
 const METEORA_TEST_SIGNATURE =
