@@ -2,9 +2,10 @@ import { PublicKey, PartiallyDecodedInstruction } from '@solana/web3.js';
 import { BN } from 'bn.js';
 import { ParsedTransactionWithMeta } from '@solana/web3.js';
 import { AmmParser, getTransactionAccounts } from './base';
-import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
+import { AmmType, PROGRAM_IDS, SwapInfo } from '../types'
 import { SwapState } from '../state';
 import { parseU64 } from '../utils';
+import { NATIVE_MINT } from '@solana/spl-token';
 
 export enum PumpfunInstructionType {
   Swap = 1,
@@ -104,13 +105,14 @@ export class PumpfunParser implements AmmParser {
       BigInt(poolPostBalance.uiTokenAmount.amount) - BigInt(poolBalance.uiTokenAmount.amount);
 
     // 创建交换信息
-    const swapInfo = {
+    return {
       Signers: [userAuthority.toString()],
       Signatures: [transaction.transaction.signatures[0]],
       AMMs: [AmmType.PUMPFUN],
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
+      Action: poolBalance.owner === NATIVE_MINT.toBase58() ? "buy" : "sell",
       TokenInMint: sourceBalance.owner,
       TokenInAmount: amountIn.toString(),
       TokenInDecimals: sourceBalance.uiTokenAmount.decimals,
@@ -118,7 +120,5 @@ export class PumpfunParser implements AmmParser {
       TokenOutAmount: outputAmount.toString(),
       TokenOutDecimals: poolBalance.uiTokenAmount.decimals,
     };
-
-    return swapInfo;
   }
 }

@@ -4,6 +4,7 @@ import { ParsedTransactionWithMeta } from '@solana/web3.js';
 import { AmmParser, getTransactionAccounts } from './base';
 import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
 import { SwapState } from '../state';
+import { NATIVE_MINT } from '@solana/spl-token';
 
 export enum MoonshotInstructionType {
   Swap = 1,
@@ -138,6 +139,7 @@ export class MoonshotParser implements AmmParser {
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
+      Action: tokenInfo.address === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
       TokenInMint: tokenInfo.address,
       TokenInAmount: sourceBalance.uiTokenAmount.amount,
       TokenInDecimals: sourceBalance.uiTokenAmount.decimals,

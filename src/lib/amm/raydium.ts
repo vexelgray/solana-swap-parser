@@ -5,6 +5,7 @@ import { AmmParser, getTransactionAccounts } from './base';
 import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
 import { SwapState } from '../state';
 import { parseU64 } from '../utils';
+import { NATIVE_MINT } from '@solana/spl-token';
 
 // Raydium V4 指令标识
 export enum RaydiumV4InstructionType {
@@ -67,7 +68,7 @@ export class RaydiumParser implements AmmParser {
     if (!swapIx || !('data' in swapIx)) {
       throw new Error('找不到 swap 指令');
     }
-
+    const poolId = swapIx.accounts[1].toBase58();
     const data = Buffer.from(swapIx.data, 'base64');
 
     // 从交易的 message 中获取账户
@@ -126,6 +127,8 @@ export class RaydiumParser implements AmmParser {
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
+      PoolId: poolId,
+      Action: destToken.address === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
       TokenInMint: sourceToken.address,
       TokenInAmount: (-sourceBalance.change).toString(),
       TokenInDecimals: sourceToken.decimals,

@@ -5,6 +5,7 @@ import { AmmParser, getTransactionAccounts } from './base';
 import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
 import { SwapState } from '../state';
 import { parseU64 } from '../utils';
+import { NATIVE_MINT } from '@solana/spl-token';
 
 export enum OrcaInstructionType {
   Swap = 1,
@@ -111,6 +112,7 @@ export class OrcaParser implements AmmParser {
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
+      Action: destToken.address === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
       TokenInMint: sourceToken.address,
       TokenInAmount: (-sourceBalance.change).toString(),
       TokenInDecimals: sourceToken.decimals,

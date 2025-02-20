@@ -1,5 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 
+export type TradeType = 'buy' | 'sell' | 'unknown';
+
 // Token信息接口
 export interface TokenInfo {
   address: string;
@@ -16,6 +18,8 @@ export interface SwapInfo {
   Signatures: string[]; // 例如: ["2XYu86VrUXiwNNj8WvngcXGytrCsSrpay69Rt3XBz9YZvCQcZJLjvDfh9UWETFtFW47vi4xG2CkiarRJwSe6VekE"]
   AMMs: string[]; // 例如: ["Moonshot"]
   Timestamp: string; // 例如: "0001-01-01T00:00:00Z"
+  PoolId?: string;
+  Action: TradeType
   TokenInMint: string; // 例如: "CQn88snXCipTxn6DBbwgSA7d9v1sXPmyxzCNNiVNXzFy"
   TokenInAmount: string; // 使用字符串来处理大数
   TokenInDecimals: number; // 例如: 9
