@@ -107,7 +107,30 @@ export class RaydiumParser implements AmmParser {
 
     // 找到变化最大的两个账户，负变化为输入，正变化为输出
     const sourceBalance = balanceChanges.find((b) => b.change < 0n);
-    const destBalance = balanceChanges.find((b) => b.change > 0n && b.mint !== sourceBalance?.mint);
+    if (!sourceBalance) {
+      throw new Error("No negative balance found");
+    }
+
+    let destBalance;
+
+    // 1) If sourceBalance.mint is SOL => this is a BUY scenario
+    if (sourceBalance.mint === NATIVE_MINT.toBase58()) {
+      // find a positive change whose mint is NOT SOL
+      destBalance = balanceChanges.find(
+        (b) => b.change > 0n && b.mint !== NATIVE_MINT.toBase58()
+      );
+
+    // 2) If sourceBalance.mint is not SOL => this is a SELL scenario
+    } else {
+      // find a positive change whose mint IS SOL
+      destBalance = balanceChanges.find(
+        (b) => b.change > 0n && b.mint === NATIVE_MINT.toBase58()
+      );
+    }
+
+    if (!destBalance) {
+      throw new Error("Could not find a matching positive balance for this swap");
+    }
 
     if (!sourceBalance?.mint || !destBalance?.mint) {
       throw new Error('无法获取代币信息');
