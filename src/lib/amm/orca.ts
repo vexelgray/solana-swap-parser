@@ -119,6 +119,16 @@ export class OrcaParser implements AmmParser {
       TokenOutMint: destToken.address,
       TokenOutAmount: destBalance.change.toString(),
       TokenOutDecimals: destToken.decimals,
+      TransactionData:{
+        meta: transaction.meta, 
+        slot: transaction.slot,
+        transaction: transaction,
+        version: transaction.version || 0,
+        preTokenBalances: preBalances,
+        postTokenBalances: postBalances,
+        preBalances: transaction.meta?.preBalances,
+        postBalances:transaction.meta?.postBalances
+      }
     };
   }
 }

@@ -119,6 +119,16 @@ export class PumpfunParser implements AmmParser {
       TokenOutMint: poolBalance.owner,
       TokenOutAmount: outputAmount.toString(),
       TokenOutDecimals: poolBalance.uiTokenAmount.decimals,
+      TransactionData:{
+        meta: transaction.meta, 
+        slot: transaction.slot,
+        transaction: transaction,
+        version: transaction.version || 0,
+        preTokenBalances: preBalances,
+        postTokenBalances: postBalances,
+        preBalances: transaction.meta?.preBalances,
+        postBalances:transaction.meta?.postBalances
+      }
     };
   }
 }

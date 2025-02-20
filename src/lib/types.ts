@@ -1,6 +1,8 @@
-import { PublicKey } from '@solana/web3.js';
+import { ParsedTransactionMeta, ParsedTransactionWithMeta, PublicKey, TokenBalance, TransactionVersion } from '@solana/web3.js';
 
 export type TradeType = 'buy' | 'sell' | 'unknown';
+
+export type transactionCategory = "Buy More" | "New holder" | "Sell part" | "Sell all" | "Unknown";
 
 // Token信息接口
 export interface TokenInfo {
@@ -12,6 +14,17 @@ export interface TokenInfo {
   logoURI?: string;
 }
 
+export interface SolanaTransactionResponse {
+  meta: ParsedTransactionMeta | null; 
+  slot: number;
+  transaction: ParsedTransactionWithMeta;
+  version: TransactionVersion;
+  preTokenBalances?: TokenBalance[];
+  postTokenBalances?: TokenBalance[];
+  preBalances?: number[];
+  postBalances?: number[];
+}
+
 // 核心接口定义，完全匹配示例数据格式
 export interface SwapInfo {
   Signers: string[]; // 例如: ["4k8WHszi2uBzTiypTKUYH1hzYkUBCARPPn6ZjPNMhDoc"]
@@ -19,13 +32,14 @@ export interface SwapInfo {
   AMMs: string[]; // 例如: ["Moonshot"]
   Timestamp: string; // 例如: "0001-01-01T00:00:00Z"
   PoolId?: string;
-  Action: TradeType
+  Action: TradeType;
   TokenInMint: string; // 例如: "CQn88snXCipTxn6DBbwgSA7d9v1sXPmyxzCNNiVNXzFy"
   TokenInAmount: string; // 使用字符串来处理大数
   TokenInDecimals: number; // 例如: 9
   TokenOutMint: string; // 例如: "So11111111111111111111111111111111111111112"
   TokenOutAmount: string; // 使用字符串来处理大数
   TokenOutDecimals: number; // 例如: 9
+  TransactionData: SolanaTransactionResponse
 }
 
 // 解析结果接口

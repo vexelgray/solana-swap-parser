@@ -123,6 +123,16 @@ export class MeteoraParser implements AmmParser {
       TokenOutMint: destToken.address,
       TokenOutAmount: minAmountOut.toString(),
       TokenOutDecimals: destToken.decimals,
+      TransactionData:{
+        meta: transaction.meta, 
+        slot: transaction.slot,
+        transaction: transaction,
+        version: transaction.version || 0,
+        preTokenBalances: preBalances,
+        postTokenBalances: postBalances,
+        preBalances: transaction.meta?.preBalances,
+        postBalances:transaction.meta?.postBalances
+      }
     };
   }
 }

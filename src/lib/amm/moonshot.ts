@@ -146,6 +146,16 @@ export class MoonshotParser implements AmmParser {
       TokenOutMint: tokenInfo.address,
       TokenOutAmount: abs(outputAmount).toString(),
       TokenOutDecimals: poolPostBalance.uiTokenAmount.decimals,
+      TransactionData:{
+        meta: transaction.meta, 
+        slot: transaction.slot,
+        transaction: transaction,
+        version: transaction.version || 0,
+        preTokenBalances: preTokenBalances,
+        postTokenBalances: postTokenBalances,
+        preBalances: transaction.meta?.preBalances,
+        postBalances:transaction.meta?.postBalances
+      }
     };
   }
 }

@@ -125,6 +125,16 @@ export class JupiterParser implements AmmParser {
       TokenOutMint: destToken.address,
       TokenOutAmount: outToken.change.toString(),
       TokenOutDecimals: outToken.decimals,
+      TransactionData:{
+        meta: transaction.meta, 
+        slot: transaction.slot,
+        transaction: transaction,
+        version: transaction.version || 0,
+        preTokenBalances: preBalances,
+        postTokenBalances: postBalances,
+        preBalances: transaction.meta?.preBalances,
+        postBalances:transaction.meta?.postBalances
+      }
     };
   }
 }
