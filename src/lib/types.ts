@@ -85,6 +85,7 @@ export const PROGRAM_MAPPINGS: Record<string, string> = {
   // Meteora
   M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K: AmmType.METEORA,
   HzwtjANeVzJPpnXTYt9MYMjVmkhTMfUyS8pJWqSRWLNr: AmmType.METEORA,
+  LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo: AmmType.METEORA,
 
   // Pumpfun
   '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': AmmType.PUMPFUN,
