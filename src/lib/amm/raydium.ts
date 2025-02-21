@@ -1,8 +1,8 @@
-import { PublicKey, PartiallyDecodedInstruction } from '@solana/web3.js';
+import { PublicKey, PartiallyDecodedInstruction, ParsedInstruction, TokenBalance } from '@solana/web3.js';
 import { BN } from 'bn.js';
 import { ParsedTransactionWithMeta } from '@solana/web3.js';
 import { AmmParser, getTransactionAccounts } from './base';
-import { AmmType, PROGRAM_IDS, SwapInfo } from '../types';
+import { AmmType, PROGRAM_IDS, SwapInfo, TokenInfo } from '../types';
 import { SwapState } from '../state';
 import { parseU64 } from '../utils';
 import { NATIVE_MINT } from '@solana/spl-token';
@@ -57,94 +57,133 @@ export class RaydiumParser implements AmmParser {
   }
 
   async parse(transaction: ParsedTransactionWithMeta, programId: string): Promise<SwapInfo> {
-    // 获取完整的账户列表
-    const { accounts } = getTransactionAccounts(transaction);
-
-    // 找到 Raydium 的指令
-    const swapIx = transaction.transaction.message.instructions.find(
-      (ix) => 'programId' in ix && ix.programId.toString() === PROGRAM_IDS.RAYDIUM
-    ) as PartiallyDecodedInstruction;
-
-    if (!swapIx || !('data' in swapIx)) {
-      throw new Error('找不到 swap 指令');
+    
+    let tokenAccountInfo: TokenInfo = {
+        address: "",
+        decimals: 0
+    };
+    
+    const timestamp = transaction.blockTime;
+    if (!timestamp) {
+        throw "Transaction is not yet processed.";
     }
-    const poolId = swapIx.accounts[1].toBase58();
-    const data = Buffer.from(swapIx.data, 'base64');
-
-    // 从交易的 message 中获取账户
-    const accountIndexes = swapIx.accounts.map((acc: PublicKey) =>
-      accounts.findIndex((key) => key === acc.toString())
+    // Extract account keys
+    const accountKeys = transaction.transaction.message.accountKeys.map(key =>
+        key.pubkey.toBase58()
     );
 
-    // 从 token balances 中获取代币信息
-    const preBalances = transaction.meta?.preTokenBalances || [];
-    const postBalances = transaction.meta?.postTokenBalances || [];
+    // Find the index of the Raydium swap instruction
+    const swapInstructionIndex = transaction.transaction.message.instructions.findIndex(
+        instruction => instruction.programId.toBase58() === PROGRAM_IDS.RAYDIUM
+    );
 
-    // 计算每个账户的余额变化
-    const balanceChanges = preBalances
-      .map((pre) => {
-        const post = postBalances.find((p) => p.accountIndex === pre.accountIndex);
-        if (!post) return null;
-
-        const preAmount = BigInt(pre.uiTokenAmount.amount);
-        const postAmount = BigInt(post.uiTokenAmount.amount);
-        const change = postAmount - preAmount;
-
-        return {
-          accountIndex: pre.accountIndex,
-          mint: pre.mint,
-          owner: pre.owner,
-          decimals: pre.uiTokenAmount.decimals,
-          change,
-          absChange: change < 0n ? -change : change,
-          preAmount: pre.uiTokenAmount.amount,
-          postAmount: post.uiTokenAmount.amount,
-        };
-      })
-      .filter((change): change is NonNullable<typeof change> => change !== null)
-      // 按变化的绝对值排序
-      .sort((a, b) => Number(b.absChange - a.absChange));
-
-    // 找到变化最大的两个账户，负变化为输入，正变化为输出
-    const sourceBalance = balanceChanges.find((b) => b.change < 0n);
-    const destBalance = balanceChanges.find((b) => b.change > 0n && b.mint !== sourceBalance?.mint);
-
-    if (!sourceBalance?.mint || !destBalance?.mint) {
-      throw new Error('无法获取代币信息');
+    if (swapInstructionIndex === -1) {
+        throw "Raydium instruction not found in the transaction.";
     }
 
-    // 获取代币信息
-    const [sourceToken, destToken] = await Promise.all([
-      SwapState.getTokenInfo(sourceBalance.mint, sourceBalance.decimals),
-      SwapState.getTokenInfo(destBalance.mint, destBalance.decimals),
-    ]);
+    if (!transaction.meta?.innerInstructions) {
+        throw "Transaction not confirmed yet.";
+    }
 
-    // 构建并返回 SwapInfo 对象
-    return {
-      Signers: [swapIx.accounts[17].toString()], // userOwner is at index 17
-      Signatures: [transaction.transaction.signatures[0]],
-      AMMs: [AmmType.RAYDIUM],
-      Timestamp: transaction.blockTime
-        ? new Date(transaction.blockTime * 1000).toISOString()
-        : new Date(0).toISOString(),
-      PoolId: poolId,
-      Action: destToken.address === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
-      TokenInMint: sourceToken.address,
-      TokenInAmount: (-sourceBalance.change).toString(),
-      TokenInDecimals: sourceToken.decimals,
-      TokenOutMint: destToken.address,
-      TokenOutAmount: destBalance.change.toString(),
-      TokenOutDecimals: destToken.decimals,
-      TransactionData:{
-        meta: transaction.meta, 
-        slot: transaction.slot,
-        transaction: transaction,
-        version: transaction.version || 0,
-        preTokenBalances: preBalances,
-        postTokenBalances: postBalances,
-        preBalances: transaction.meta?.preBalances,
-        postBalances:transaction.meta?.postBalances
-      }
-    };
+    // Extract inner instructions related to the swap
+    const swapInnerInstructions = transaction.meta.innerInstructions.reduce<ParsedInstruction[]>((accumulator, innerInstruction) => {
+        if (innerInstruction.index === swapInstructionIndex) {
+            const parsedInstructions = innerInstruction.instructions as ParsedInstruction[];
+            return accumulator.concat(parsedInstructions);
+        }
+        return accumulator;
+    }, []);
+
+    const destination1 = swapInnerInstructions[0].parsed.info.destination;
+    const destination1AccountInfo = transaction.meta.preTokenBalances!.find(
+        balance => balance.accountIndex === accountKeys.indexOf(destination1)
+    );
+
+    const swapInstruction = transaction.transaction.message.instructions[swapInstructionIndex] as PartiallyDecodedInstruction;
+
+    // Extract pool ID and token accounts
+    const poolId = swapInstruction.accounts[1].toBase58();
+    const token1Account = swapInstruction.accounts[5].toBase58();
+    const token2Account = swapInstruction.accounts[6].toBase58();
+
+    // Retrieve account information for both tokens
+    const token1AccountInfo = transaction.meta.preTokenBalances!.find(
+        balance => balance.accountIndex === accountKeys.indexOf(token1Account)
+    );
+    const token2AccountInfo = transaction.meta.preTokenBalances!.find(
+        balance => balance.accountIndex === accountKeys.indexOf(token2Account)
+    );
+
+    if (token1AccountInfo!.mint === NATIVE_MINT.toBase58()) {
+        tokenAccountInfo.address = token2AccountInfo!.mint;
+        tokenAccountInfo.decimals = token2AccountInfo!.uiTokenAmount.decimals;
+    } else if (token2AccountInfo!.mint === NATIVE_MINT.toBase58()) {
+        tokenAccountInfo.address = token1AccountInfo!.mint;
+        tokenAccountInfo.decimals = token1AccountInfo!.uiTokenAmount.decimals;
+    }
+
+    // Parse amounts from inner instructions
+    const token1Amount = Number((swapInnerInstructions[0] as ParsedInstruction).parsed.info.amount);
+    const token2Amount = Number((swapInnerInstructions[1] as ParsedInstruction).parsed.info.amount);
+
+    if (destination1AccountInfo?.mint === NATIVE_MINT.toBase58()) {
+
+      return {
+        Signers:  accountKeys, // userOwner is at index 17
+        Signatures: transaction.transaction.signatures,
+        AMMs: [AmmType.RAYDIUM],
+        Timestamp: transaction.blockTime
+          ? new Date(transaction.blockTime * 1000).toISOString()
+          : new Date(0).toISOString(),
+        PoolId: poolId,
+        Action: destination1AccountInfo?.mint === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
+        TokenInMint: tokenAccountInfo!.address,
+        TokenInAmount: token1Amount.toString(),
+        TokenInDecimals: tokenAccountInfo!.decimals,
+        TokenOutMint: token2AccountInfo?.mint!,
+        TokenOutAmount: token2Amount.toString(),
+        TokenOutDecimals: token2AccountInfo!.uiTokenAmount.decimals,
+        TransactionData:{
+          meta: transaction.meta, 
+          slot: transaction.slot,
+          transaction: transaction,
+          version: transaction.version || 0,
+          preTokenBalances: transaction.meta.preTokenBalances as TokenBalance[],
+          postTokenBalances: transaction.meta.postTokenBalances as TokenBalance[],
+          preBalances: transaction.meta?.preBalances,
+          postBalances:transaction.meta?.postBalances
+        }
+      };
+
+    }
+    else {
+
+      return {
+        Signers:  accountKeys, // userOwner is at index 17
+        Signatures: transaction.transaction.signatures,
+        AMMs: [AmmType.RAYDIUM],
+        Timestamp: transaction.blockTime
+          ? new Date(transaction.blockTime * 1000).toISOString()
+          : new Date(0).toISOString(),
+        PoolId: poolId,
+        Action: destination1AccountInfo?.mint === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
+        TokenInMint: token2AccountInfo?.mint!,
+        TokenInAmount: token2Amount.toString(),
+        TokenInDecimals: tokenAccountInfo.decimals,
+        TokenOutMint: token1AccountInfo?.mint!,
+        TokenOutAmount: token1Amount.toString(),
+        TokenOutDecimals: token1AccountInfo!.uiTokenAmount.decimals,
+        TransactionData:{
+          meta: transaction.meta, 
+          slot: transaction.slot,
+          transaction: transaction,
+          version: transaction.version || 0,
+          preTokenBalances: transaction.meta.preTokenBalances as TokenBalance[],
+          postTokenBalances: transaction.meta.postTokenBalances as TokenBalance[],
+          preBalances: transaction.meta?.preBalances,
+          postBalances:transaction.meta?.postBalances
+        }
+      };
+    }
   }
 }

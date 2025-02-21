@@ -20,7 +20,7 @@ const logSwapResult = (amm: string, data: any) => {
 
 // Raydium swap 交易签名
 const RAYDIUM_TEST_SIGNATURE =
-  '4UCMpMpzoxDEf1xeT2dzRF8HJQpDYEpwqp5Y5pEiiWSgKKNo28nZ52WssBMG6SUZHwoWT5q4GvrVvwwNNQPfj1Ty';
+  '3yBzHnTVwFCzFGFHXSVxJNm3DcTrAsjTuP3LafCPDuqQ9GQy2pQGAxGaQyh92K6fqztVeGEFrYsSHp1qeGfZw1W7';
 
 // Orca swap 交易签名
 const ORCA_TEST_SIGNATURE =
@@ -36,7 +36,7 @@ const METEORA_TEST_SIGNATURE =
 
 // Pumpfun swap 交易签名
 const PUMPFUN_TEST_SIGNATURE =
-  '2bz3AJVqx1LBZE1qcrqnqf8uFfwkeToufV1ZteZKXYmJEA4A89VAt5o7hJA8KgyKDGcHZLfNBpJgtT6a3UGCZn4r'; // 需要填入一个 Pumpfun swap 交易签名
+  'PxySSUk3UMqq9r3uUYq9dN11dUd2undHZPvh9surRYMArScYRmTKMcrkFgzvuNRZSam1BHwsteUYzyM2y9FySwe'; // 需要填入一个 Pumpfun swap 交易签名
 
 // Moonshot swap 交易签名
 const MOONSHOT_TEST_SIGNATURE =
