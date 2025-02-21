@@ -167,10 +167,10 @@ export class RaydiumParser implements AmmParser {
         PoolId: poolId,
         Action: 'sell',
         TokenInMint: token1AccountInfo?.mint!,
-        TokenInAmount: token1Amount.toString(),
+        TokenInAmount: token2Amount.toString(),
         TokenInDecimals: token1AccountInfo!.uiTokenAmount.decimals,
         TokenOutMint: token2AccountInfo?.mint!,
-        TokenOutAmount: token2Amount.toString(),
+        TokenOutAmount: token1Amount.toString(),
         TokenOutDecimals: token2AccountInfo!.uiTokenAmount.decimals,
         TransactionData:{
           meta: transaction.meta, 
