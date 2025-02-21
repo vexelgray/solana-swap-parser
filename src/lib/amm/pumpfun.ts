@@ -62,6 +62,12 @@ export class PumpfunParser implements AmmParser {
     throw new Error('No Pumpfun instruction found');
   }
 
+  private  isParsedInstruction(
+    ix: PartiallyDecodedInstruction | ParsedInstruction
+  ): ix is ParsedInstruction {
+    return 'parsed' in ix; 
+  }
+
   async parse(transaction: ParsedTransactionWithMeta, programId: string): Promise<SwapInfo> {
     // 1) Find the Pump.fun instruction
     const swapIx = this.findPumpfunInstruction(transaction);
@@ -88,15 +94,20 @@ export class PumpfunParser implements AmmParser {
       )
     );
 
-    const solTransfers = transaction.meta?.innerInstructions?.flatMap(ix => 
-      ix.instructions.filter(i => 
-        'parsed' in i && 
-        i.parsed?.type === 'transfer' && 
-        i.parsed?.info?.source === userAuthority
-      )
+    const solTransfers = transaction.meta?.innerInstructions?.flatMap((inner) =>
+      inner.instructions
+        .filter(this.isParsedInstruction) // Only keep ParsedInstruction
+        .filter(
+          (i) =>
+            i.parsed?.type === 'transfer' &&
+            i.parsed?.info?.source === userAuthority
+        )
     ) || [];
-
-    const solAmount = solTransfers
+    
+    const solAmount = solTransfers.reduce(
+      (sum, ix) => sum.add(new BN(ix.parsed.info.lamports || 0)),
+      new BN(0)
+    );
 
     // Validar datos críticos
     if (!tokenBalances || !mint) {
