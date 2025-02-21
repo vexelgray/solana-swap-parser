@@ -105,65 +105,96 @@ export class RaydiumParser implements AmmParser {
       // 按变化的绝对值排序
       .sort((a, b) => Number(b.absChange - a.absChange));
 
-      const sourceBalance = balanceChanges.find(b => b.change < 0n);
-      if (!sourceBalance) throw new Error("No negative balance found");
-
-      // Are we buying tokens with SOL or selling tokens for SOL?
-      const isBuy = sourceBalance.mint === NATIVE_MINT.toBase58();
-
-      // If it's a buy, we expect a positive token
-      let destBalance;
-      if (isBuy) {
-          destBalance = balanceChanges.find(
-              b => b.change > 0n && b.mint !== NATIVE_MINT.toBase58()
-      );
-      } else {
-      // It's a sell => we expect a positive SOL
-          destBalance = balanceChanges.find(
-              b => b.change > 0n && b.mint === NATIVE_MINT.toBase58()
-      );
-      }
-
-      if (!destBalance) {
-          throw new Error("Could not find the expected positive side. Possibly aggregator or no net gain.");
-      }
-
-    if (!sourceBalance?.mint || !destBalance?.mint) {
-      throw new Error('无法获取代币信息');
+      // ----------------------------------------------------------------------
+    // 7) Attempt to find a negative entry from the "user"
+    //    If you have a known userPublicKey, you could filter by .owner === userPublicKey
+    //    But if you don't, we just pick the largest negative as "sourceBalance".
+    // ----------------------------------------------------------------------
+    const sourceBalance = balanceChanges.find((b) => b.change < 0n);
+    if (!sourceBalance) {
+      throw new Error('No negative balance found in token balances');
     }
 
-    // 获取代币信息
+    // ----------------------------------------------------------------------
+    // 8) Attempt to find a positive entry that belongs to the same user or might be aggregator
+    //    We'll do a simple approach: find any positive entry that is a different mint
+    //    from the source. This might work for a typical "buy" scenario.
+    // ----------------------------------------------------------------------
+    let destBalance = balanceChanges.find(
+      (b) => b.change > 0n && b.mint !== sourceBalance.mint
+    );
+
+    // If we didn't find a positive with a different mint, check if there's a "same mint" scenario
+    // or aggregator logic. For example, maybe the aggregator minted the same token
+    // or the aggregator ended up with SOL. 
+    if (!destBalance) {
+      // Try to see if there's a positive entry at all
+      const anyPositive = balanceChanges.find((b) => b.change > 0n);
+      if (anyPositive) {
+        // e.g. aggregator scenario:
+        destBalance = anyPositive;
+      }
+    }
+
+    // If still undefined, then there's no positive side for the user or aggregator
+    if (!destBalance) {
+      throw new Error('Could not find a matching positive balance (aggregator might hold it)');
+    }
+
+    // 9) Fetch token info for both sides
     const [sourceToken, destToken] = await Promise.all([
       SwapState.getTokenInfo(sourceBalance.mint, sourceBalance.decimals),
       SwapState.getTokenInfo(destBalance.mint, destBalance.decimals),
     ]);
 
-    // 构建并返回 SwapInfo 对象
+    // ----------------------------------------------------------------------
+    // 10) Determine "buy" or "sell"
+    //     - If destToken is SOL => user is buying SOL, so "sell" tokens?
+    //     - If sourceToken is SOL => user is buying token => "buy"
+    //   Or simpler: if sourceBalance.mint === NATIVE_MINT => "buy", else "sell".
+    // ----------------------------------------------------------------------
+    let action: 'buy' | 'sell';
+    if (sourceToken.address === NATIVE_MINT.toBase58()) {
+      // Negative is SOL => user is buying some token
+      action = 'buy';
+    } else {
+      // Negative is some token => user is selling that token (likely for SOL)
+      action = 'sell';
+    }
+
+    // But note: In your logs, the aggregator might have the positive SOL,
+    // so from the user's perspective, they see no net gain of SOL.
+
+    // ----------------------------------------------------------------------
+    // 11) Build your final SwapInfo
+    // ----------------------------------------------------------------------
     return {
-      Signers: [swapIx.accounts[17].toString()], // userOwner is at index 17
+      Signers: [swapIx.accounts[17].toString()], // userOwner index depends on Raydium's layout
       Signatures: [transaction.transaction.signatures[0]],
       AMMs: [AmmType.RAYDIUM],
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
       PoolId: poolId,
-      Action: destToken.address === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
+      Action: action,
+      // The user is "spending" this token
       TokenInMint: sourceToken.address,
-      TokenInAmount: (-sourceBalance.change).toString(),
+      TokenInAmount: (-sourceBalance.change).toString(), // Make it positive
       TokenInDecimals: sourceToken.decimals,
+      // The user or aggregator "receives" this token
       TokenOutMint: destToken.address,
       TokenOutAmount: destBalance.change.toString(),
       TokenOutDecimals: destToken.decimals,
-      TransactionData:{
-        meta: transaction.meta, 
+      TransactionData: {
+        meta: transaction.meta,
         slot: transaction.slot,
         transaction: transaction,
         version: transaction.version || 0,
         preTokenBalances: preBalances,
         postTokenBalances: postBalances,
         preBalances: transaction.meta?.preBalances,
-        postBalances:transaction.meta?.postBalances
-      }
+        postBalances: transaction.meta?.postBalances,
+      },
     };
   }
 }
