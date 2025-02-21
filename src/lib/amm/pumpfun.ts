@@ -80,19 +80,29 @@ export class PumpfunParser implements AmmParser {
 
     // Obtener cuentas relevantes según estructura del IDL
     const accounts = swapIx.accounts.map(pubkey => pubkey.toString());
-    const isBuy = instructionType === 1;
+    const isBuy = instructionType === 0;
 
     // Determinar mints y direcciones
     const mint = accounts[2]; // Índice del mint en las cuentas
     const userAuthority = accounts[6]; // Usuario que firma
     const userTokenAccount = accounts[5]; // Token account del usuario
 
-    // Calcular montos de tokens
-    const tokenBalances = transaction.meta?.postTokenBalances?.find(
+    // Calculate token balances - Find user's token balance change
+    const userPostTokenBalance = transaction.meta?.postTokenBalances?.find(
       b => b.accountIndex === transaction.transaction.message.accountKeys.findIndex(
-        acc => acc.pubkey.toString() === userTokenAccount
+        acc => acc.pubkey.toString() === userTokenAccount && b.mint === mint // Ensure mint also matches
       )
     );
+    const userPreTokenBalance = transaction.meta?.preTokenBalances?.find(
+      b => b.accountIndex === transaction.transaction.message.accountKeys.findIndex(
+        acc => acc.pubkey.toString() === userTokenAccount && b.mint === mint // Ensure mint also matches
+      )
+    );
+
+    const tokenAmountChange = userPostTokenBalance && userPreTokenBalance
+        ? BigInt(userPostTokenBalance.uiTokenAmount.amount) - BigInt(userPreTokenBalance.uiTokenAmount.amount)
+        : (userPostTokenBalance ? BigInt(userPostTokenBalance.uiTokenAmount.amount) : 0n) - (userPreTokenBalance ? BigInt(userPreTokenBalance.uiTokenAmount.amount) : 0n);
+
 
     const solTransfers = transaction.meta?.innerInstructions?.flatMap((inner) =>
       inner.instructions
@@ -103,15 +113,21 @@ export class PumpfunParser implements AmmParser {
             i.parsed?.info?.source === userAuthority
         )
     ) || [];
-    
+
     const solAmount = solTransfers.reduce(
       (sum, ix) => sum.add(new BN(ix.parsed.info.lamports || 0)),
       new BN(0)
     );
 
     // Validar datos críticos
-    if (!tokenBalances || !mint) {
-      throw new Error('Datos esenciales no encontrados');
+    if (!userPostTokenBalance && isBuy) { // For buy, postTokenBalance should exist
+      throw new Error('Datos esenciales no encontrados: userPostTokenBalance for buy');
+    }
+    if (!userPreTokenBalance && !isBuy) { // For sell, preTokenBalance should exist
+        throw new Error('Datos esenciales no encontrados: userPreTokenBalance for sell');
+    }
+    if (!mint) {
+      throw new Error('Datos esenciales no encontrados: mint');
     }
 
     return {
@@ -120,12 +136,12 @@ export class PumpfunParser implements AmmParser {
       AMMs: [AmmType.PUMPFUN],
       Timestamp: new Date(transaction.blockTime! * 1000).toISOString(),
       Action: isBuy ? "buy" : "sell",
-      TokenInMint: isBuy ? NATIVE_MINT.toBase58() : mint,
-      TokenInAmount: isBuy ? solAmount.toString() : amount.toString(),
-      TokenInDecimals: isBuy ? 9 : tokenBalances.uiTokenAmount.decimals,
-      TokenOutMint: isBuy ? mint : NATIVE_MINT.toBase58(),
-      TokenOutAmount: isBuy ? tokenBalances.uiTokenAmount.amount : limit.toString(),
-      TokenOutDecimals: isBuy ? tokenBalances.uiTokenAmount.decimals : 9,
+      TokenInMint: isBuy ? NATIVE_MINT.toBase58() : mint, // SOL in for buy, Token in for sell
+      TokenInAmount: isBuy ? solAmount.toString() : (-tokenAmountChange).toString(), // SOL amount in for buy, Token amount in for sell (positive for input)
+      TokenInDecimals: isBuy ? 9 : userPostTokenBalance?.uiTokenAmount.decimals || 6, // SOL decimals for buy, Token decimals for sell
+      TokenOutMint: isBuy ? mint : NATIVE_MINT.toBase58(), // Token out for buy, SOL out for sell
+      TokenOutAmount: isBuy ? tokenAmountChange.toString() : solAmount.toString(), // Token amount out for buy (positive for output), SOL amount out for sell
+      TokenOutDecimals: isBuy ? userPostTokenBalance?.uiTokenAmount.decimals || 6 : 9, // Token decimals for buy, SOL decimals for sell
       TransactionData: {
         meta: transaction.meta,
         slot: transaction.slot,
