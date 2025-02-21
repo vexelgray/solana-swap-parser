@@ -44,91 +44,142 @@ export class PumpfunParser implements AmmParser {
   }
 
   async parse(transaction: ParsedTransactionWithMeta, programId: string): Promise<SwapInfo> {
-    // 获取完整的账户列表
-    const { accounts } = getTransactionAccounts(transaction);
+    // 1) Find the Pump.fun instruction
+    const pumpIx = transaction.transaction.message.instructions.find(
+      (ix) => 'programId' in ix && ix.programId.toBase58() === programId
+    ) as PartiallyDecodedInstruction | undefined;
 
-    // 找到 Pumpfun 的指令
-    const swapIx = transaction.transaction.message.instructions.find(
-      (ix) => 'programId' in ix && ix.programId.toString() === PROGRAM_IDS.PUMPFUN
-    ) as PartiallyDecodedInstruction;
-
-    if (!swapIx || !('data' in swapIx)) {
-      throw new Error('找不到 swap 指令');
+    if (!pumpIx) {
+      throw new Error("No Pump.fun instruction found in this transaction");
     }
 
-    const data = Buffer.from(swapIx.data, 'base64');
+    // 2) Optionally parse the instruction data to see if it's a "buy" or "sell"
+    //    The first byte typically indicates which method is being called (by IDL order).
+    //    Or we can just rely on pre/post changes. 
+    const data = Buffer.from(pumpIx.data, 'base64');
+    // For demonstration, let's do a minimal parse:
+    //   - The Anchor IDL will have a "discriminator" for the instruction, which is 8 bytes typically.
+    //   - Then the rest are the arguments. But to keep it simple, we can just check the logMessages or 
+    //     rely on negative vs. positive tokens. 
+    //   - Alternatively, you can watch for "Program log: Instruction: Buy" / "Instruction: Sell" in logMessages.
 
-    const amountIn = parseU64(data, 1);
-    const minAmountOut = parseU64(data, 9);
-
-    // 从交易的 message 中获取账户
-    const accountIndexes = swapIx.accounts.map((acc: PublicKey) =>
-      accounts.findIndex((key) => key === acc.toString())
-    );
-
-    if (accountIndexes.includes(-1)) {
-      throw new Error('无法找到对应的账户');
+    let instructionName: 'buy' | 'sell' | 'unknown' = 'unknown';
+    const logMessages = transaction.meta?.logMessages || [];
+    for (const log of logMessages) {
+      if (log.includes('Program log: Instruction: Buy')) {
+        instructionName = 'buy';
+        break;
+      }
+      if (log.includes('Program log: Instruction: Sell')) {
+        instructionName = 'sell';
+        break;
+      }
     }
 
-    // 直接从指令的账户列表中获取用户账户
-    const userSourceTokenAccount = swapIx.accounts[5];
-    const userDestTokenAccount = swapIx.accounts[6];
-    const userAuthority = swapIx.accounts[7];
-
-    // 从 token balances 中获取代币信息
+    // 3) Build the list of pre/post token balance changes
     const preBalances = transaction.meta?.preTokenBalances || [];
     const postBalances = transaction.meta?.postTokenBalances || [];
 
-    // 获取源账户的代币信息
-    const sourceBalance = preBalances.find((b) => b.accountIndex === accountIndexes[5]);
+    const balanceChanges = preBalances
+      .map((pre) => {
+        const post = postBalances.find((p) => p.accountIndex === pre.accountIndex);
+        if (!post) return null;
 
-    // 获取池账户的代币信息
-    const poolBalance = preBalances.find((b) => b.accountIndex === 1);
+        const preAmount = BigInt(pre.uiTokenAmount.amount);
+        const postAmount = BigInt(post.uiTokenAmount.amount);
+        const change = postAmount - preAmount;
 
-    if (!sourceBalance?.mint || !poolBalance?.mint) {
-      throw new Error('无法找到代币信息');
+        return {
+          accountIndex: pre.accountIndex,
+          mint: pre.mint,
+          owner: pre.owner,
+          decimals: pre.uiTokenAmount.decimals,
+          change,
+          absChange: change < 0n ? -change : change,
+          preAmount: pre.uiTokenAmount.amount,
+          postAmount: post.uiTokenAmount.amount,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => Number(b.absChange - a.absChange));
+
+    if (balanceChanges.length === 0) {
+      throw new Error("No token balance changes found");
     }
 
-    if (!sourceBalance.owner || !poolBalance.owner) {
-      throw new Error('无法找到代币所有者信息');
+    // 4) Typically, the user is the one with negative SOL if it's a "buy," or negative tokens if it's a "sell."
+    //    We'll find the largest negative => that's the "input." Then find a largest positive => "output."
+    const sourceChange = balanceChanges.find((b) => b.change < 0n);
+    const destChange = balanceChanges.find((b) => b.change > 0n);
+
+    if (!sourceChange || !destChange) {
+      // Possibly aggregator usage or no net user gain. 
+      // For your example, we do see a negative SOL and a positive token.
+      throw new Error("Could not find both negative and positive changes for user in Pump.fun transaction");
     }
 
-    // 获取池账户的后余额
-    const poolPostBalance = postBalances.find((b) => b.accountIndex === 1);
+    // 5) Load token info for each side
+    const [sourceToken, destToken] = await Promise.all([
+      SwapState.getTokenInfo(sourceChange.mint, sourceChange.decimals),
+      SwapState.getTokenInfo(destChange.mint, destChange.decimals),
+    ]);
 
-    if (!poolPostBalance) {
-      throw new Error('无法找到池账户的后余额');
+    // 6) Decide if it's buy or sell
+    //    We can combine both approaches:
+    //    - If instructionName is "buy"/"sell", we trust that.
+    //    - Otherwise, we guess from negative SOL => buy, negative minted token => sell.
+    let action: 'buy' | 'sell';
+    if (instructionName === 'buy' || instructionName === 'sell') {
+      action = instructionName;
+    } else {
+      // fallback approach
+      if (sourceToken.address === NATIVE_MINT.toBase58()) {
+        action = 'buy';
+      } else {
+        action = 'sell';
+      }
     }
 
-    // 计算实际的输出金额
-    const outputAmount =
-      BigInt(poolPostBalance.uiTokenAmount.amount) - BigInt(poolBalance.uiTokenAmount.amount);
+    // 7) The user is typically at index 6 in the IDL for both buy/sell
+    //    So let's confirm we have at least 7 accounts, then pick index 6
+    const userIndex = 6; 
+    if (pumpIx.accounts.length <= userIndex) {
+      throw new Error("PumpFun instruction does not have enough accounts for user at index 6");
+    }
+    const userPubkey = pumpIx.accounts[userIndex];
 
-    // 创建交换信息
+    // 8) Build the final SwapInfo
+    //    sourceChange.change is negative => user spent that token
+    //    so the input amount is -sourceChange.change
+    //    destChange.change is positive => user received that token
+    const tokenInAmount = (-sourceChange.change).toString();
+    const tokenOutAmount = destChange.change.toString();
+
     return {
-      Signers: [userAuthority.toString()],
+      Signers: [userPubkey.toBase58()],
       Signatures: [transaction.transaction.signatures[0]],
       AMMs: [AmmType.PUMPFUN],
       Timestamp: transaction.blockTime
         ? new Date(transaction.blockTime * 1000).toISOString()
         : new Date(0).toISOString(),
-      Action: poolBalance.owner === NATIVE_MINT.toBase58() ? "buy" : "sell",
-      TokenInMint: sourceBalance.owner,
-      TokenInAmount: amountIn.toString(),
-      TokenInDecimals: sourceBalance.uiTokenAmount.decimals,
-      TokenOutMint: poolBalance.owner,
-      TokenOutAmount: outputAmount.toString(),
-      TokenOutDecimals: poolBalance.uiTokenAmount.decimals,
-      TransactionData:{
-        meta: transaction.meta, 
+      Action: action,
+      TokenInMint: sourceToken.address,
+      TokenInAmount: tokenInAmount,
+      TokenInDecimals: sourceToken.decimals,
+      TokenOutMint: destToken.address,
+      TokenOutAmount: tokenOutAmount,
+      TokenOutDecimals: destToken.decimals,
+
+      TransactionData: {
+        meta: transaction.meta,
         slot: transaction.slot,
         transaction: transaction,
         version: transaction.version || 0,
         preTokenBalances: preBalances,
         postTokenBalances: postBalances,
         preBalances: transaction.meta?.preBalances,
-        postBalances:transaction.meta?.postBalances
-      }
+        postBalances: transaction.meta?.postBalances,
+      },
     };
   }
 }
