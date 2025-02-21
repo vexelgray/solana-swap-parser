@@ -136,7 +136,7 @@ export class RaydiumParser implements AmmParser {
           ? new Date(transaction.blockTime * 1000).toISOString()
           : new Date(0).toISOString(),
         PoolId: poolId,
-        Action: destination1AccountInfo?.mint === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
+        Action:'buy',
         TokenInMint: token2AccountInfo?.mint!,
         TokenInAmount: token2Amount.toString(),
         TokenInDecimals: token2AccountInfo!.uiTokenAmount.decimals,
@@ -157,7 +157,6 @@ export class RaydiumParser implements AmmParser {
 
     }
     else {
-
       return {
         Signers:  accountKeys, // userOwner is at index 17
         Signatures: transaction.transaction.signatures,
@@ -166,13 +165,13 @@ export class RaydiumParser implements AmmParser {
           ? new Date(transaction.blockTime * 1000).toISOString()
           : new Date(0).toISOString(),
         PoolId: poolId,
-        Action: destination1AccountInfo?.mint === NATIVE_MINT.toBase58() ? 'buy' : 'sell',
-        TokenInMint: token2AccountInfo?.mint!,
-        TokenInAmount: token2Amount.toString(),
-        TokenInDecimals: tokenAccountInfo.decimals,
-        TokenOutMint: token1AccountInfo?.mint!,
-        TokenOutAmount: token1Amount.toString(),
-        TokenOutDecimals: token1AccountInfo!.uiTokenAmount.decimals,
+        Action: 'sell',
+        TokenInMint: token1AccountInfo?.mint!,
+        TokenInAmount: token1Amount.toString(),
+        TokenInDecimals: token1AccountInfo!.uiTokenAmount.decimals,
+        TokenOutMint: token2AccountInfo?.mint!,
+        TokenOutAmount: token2Amount.toString(),
+        TokenOutDecimals: token2AccountInfo!.uiTokenAmount.decimals,
         TransactionData:{
           meta: transaction.meta, 
           slot: transaction.slot,
