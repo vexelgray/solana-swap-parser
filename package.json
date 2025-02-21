@@ -47,8 +47,7 @@
     "@solana/buffer-layout-utils": "^0.2.0",
     "@solana/spl-token": "^0.4.12",
     "@solana/web3.js": "^1.98.0",
-    "bn.js": "^5.2.1",
-    "sol-parser": "https://github.com/Tee-py/solana-txn-parser.git"
+    "bn.js": "^5.2.1"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
