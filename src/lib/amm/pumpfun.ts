@@ -3,8 +3,8 @@ import { ParsedTransactionWithMeta } from '@solana/web3.js';
 import { AmmParser } from './base';
 import { PROGRAM_IDS, SwapInfo } from '../types'
 import { NATIVE_MINT } from '@solana/spl-token';
-import { PumpFunParser } from '../../modules/solana-txn-parser/src';
-import { TradeInfo } from '../../modules/solana-txn-parser/src/parser/pumpfun/types';
+import { PumpFunParser} from 'sol-parser/src';
+import { TradeInfo } from 'sol-parser/src/parser/pumpfun/types';
 
 const parser = new PumpFunParser();
 
