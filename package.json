@@ -32,6 +32,8 @@
   "homepage": "https://github.com/ideacco/solana-swap-parser#readme",
   "scripts": {
     "build": "tsc",
+    "start": "ts-node index.ts",
+    "tsc": "tsc --noEmit",
     "prepare": "yarn build",
     "test": "jest --config jest.config.js --verbose",
     "test:build": "yarn build && yarn test",
@@ -45,7 +47,8 @@
     "@solana/buffer-layout-utils": "^0.2.0",
     "@solana/spl-token": "^0.4.12",
     "@solana/web3.js": "^1.98.0",
-    "bn.js": "^5.2.1"
+    "bn.js": "^5.2.1",
+    "sol-parser": "https://github.com/Tee-py/solana-txn-parser.git"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
